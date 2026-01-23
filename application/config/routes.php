@@ -136,6 +136,10 @@ $route['profile'] = 'profile/index';
 $route['sections'] = 'sections/index';
 $route['migration_runner'] = 'migration_runner/index';
 $route['migration_runner/(:any)'] = 'migration_runner/$1';
+$route['fix_terms'] = 'fix_terms/index';
+$route['fix_terms/(:any)'] = 'fix_terms/$1';
+$route['migrate_terms'] = 'migrate_terms/index';
+$route['migrate_terms/(:any)'] = 'migrate_terms/$1';
 $route['subscription_review/(:num)'] = 'saas_website/purchase_complete/$1';
 
 $route['authentication'] = 'authentication/index';

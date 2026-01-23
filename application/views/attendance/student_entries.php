@@ -1,7 +1,17 @@
 <?php $widget = (is_superadmin_loggedin() ? 3 : 4); ?>
 <section class="panel">
 	<header class="panel-heading">
-		<h4 class="panel-title"><?=translate('select_ground')?></h4>
+		<h4 class="panel-title">
+			<?=translate('select_ground')?>
+			<?php if (isset($active_term) && $active_term): ?>
+				<span class="pull-right">
+					<span class="badge badge-info" style="font-size: 12px; padding: 5px 10px;">
+						<i class="fas fa-calendar-alt"></i> Active Term: <?= $active_term->term_name ?>
+						(<?= date('M d, Y', strtotime($active_term->start_date)) ?> - <?= date('M d, Y', strtotime($active_term->end_date)) ?>)
+					</span>
+				</span>
+			<?php endif; ?>
+		</h4>
 	</header>
 	<?php echo form_open($this->uri->uri_string());?>
 	<div class="panel-body">

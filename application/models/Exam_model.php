@@ -13,7 +13,7 @@ class Exam_model extends CI_Model
 
     public function getExamByID($id = null)
     {
-        $sql = "SELECT `e`.*, `exam_term`.`name` as `term_name`, `b`.`name` as `branch_name` FROM `exam` as `e` INNER JOIN `branch` as `b` ON `b`.`id` = `e`.`branch_id` LEFT JOIN `exam_term` ON `exam_term`.`id` = `e`.`term_id` WHERE `e`.`id` = {$this->db->escape($id)}";
+        $sql = "SELECT `e`.*, `academic_terms`.`term_name` as `term_name`, `b`.`name` as `branch_name` FROM `exam` as `e` INNER JOIN `branch` as `b` ON `b`.`id` = `e`.`branch_id` LEFT JOIN `academic_terms` ON `academic_terms`.`id` = `e`.`term_id` WHERE `e`.`id` = {$this->db->escape($id)}";
         return $this->db->query($sql)->row();
     }
 
@@ -71,22 +71,16 @@ class Exam_model extends CI_Model
         }
     }
 
+    /**
+     * DEPRECATED: Term management moved to Sessions module
+     * Use academic_terms table and Sessions controller for term management
+     * This method is kept for backward compatibility but does nothing
+     */
     public function termSave($post)
     {
-        $arrayTerm = array(
-            'name' => $post['term_name'],
-            'branch_id' => $this->application_model->get_branch_id(),
-            'session_id' => get_session_id(),
-        );
-        if (!isset($post['term_id'])) {
-            $this->db->insert('exam_term', $arrayTerm);
-        } else {
-            if (!is_superadmin_loggedin()) {
-                $this->db->where('branch_id', get_loggedin_branch_id());
-            }
-            $this->db->where('id', $post['term_id']);
-            $this->db->update('exam_term', $arrayTerm);
-        }
+        // Terms are now managed through the Sessions module using academic_terms table
+        // Redirect users to manage terms via Sessions > View Terms
+        return false;
     }
 
     public function hallSave($post)

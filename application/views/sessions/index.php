@@ -559,5 +559,139 @@
 				}
 			});
 		});
+
+		// Inline date editing functionality
+		$('.edit-date-btn').on('click', function() {
+			var cell = $(this).closest('.editable-date');
+			var displaySpan = cell.find('.date-display');
+			var inputField = cell.find('.date-input');
+			var editBtn = $(this);
+
+			if (inputField.is(':visible')) {
+				// Save mode
+				var newValue = inputField.val();
+				var termId = cell.data('term-id');
+				var field = cell.data('field');
+
+				if (!newValue) {
+					swal({
+						title: '<?=translate('error')?>',
+						text: '<?=translate('please_select_a_date')?>',
+						type: 'error',
+						confirmButtonClass: 'btn btn-default',
+						buttonsStyling: false
+					});
+					return;
+				}
+
+				// Save via AJAX
+				editBtn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+				$.ajax({
+					url: '<?=base_url('sessions/quick_adjust_term')?>',
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						term_id: termId,
+						field: field,
+						value: newValue,
+						<?=$this->security->get_csrf_token_name()?>: '<?=$this->security->get_csrf_hash()?>'
+					},
+					success: function(response) {
+						if (response.status === 'success') {
+							// Update display
+							var dateObj = new Date(newValue);
+							var options = { year: 'numeric', month: 'short', day: 'numeric' };
+							displaySpan.text(dateObj.toLocaleDateString('en-US', options));
+
+							// Update total weeks if returned
+							if (response.total_weeks) {
+								cell.closest('tr').find('.total-weeks-cell').html(response.total_weeks + ' <?=translate('weeks')?>');
+							}
+
+							// Toggle back to view mode
+							inputField.hide();
+							displaySpan.show();
+							editBtn.prop('disabled', false).html('<i class="fas fa-pencil-alt"></i>');
+
+							swal({
+								title: '<?=translate('success')?>',
+								text: response.message,
+								type: 'success',
+								timer: 2000,
+								showConfirmButton: false
+							});
+						} else {
+							swal({
+								title: '<?=translate('error')?>',
+								text: response.message,
+								type: 'error',
+								confirmButtonClass: 'btn btn-default',
+								buttonsStyling: false
+							});
+							editBtn.prop('disabled', false).html('<i class="fas fa-pencil-alt"></i>');
+						}
+					},
+					error: function(xhr, status, error) {
+						console.error('AJAX Error:', error);
+						swal({
+							title: '<?=translate('error')?>',
+							text: '<?=translate('an_error_occurred_please_try_again')?>',
+							type: 'error',
+							confirmButtonClass: 'btn btn-default',
+							buttonsStyling: false
+						});
+						editBtn.prop('disabled', false).html('<i class="fas fa-pencil-alt"></i>');
+					}
+				});
+			} else {
+				// Edit mode
+				displaySpan.hide();
+				inputField.show().focus();
+				editBtn.html('<i class="fas fa-save"></i>');
+			}
+		});
+
+		// Cancel edit on ESC key
+		$('.date-input').on('keydown', function(e) {
+			if (e.key === 'Escape') {
+				var cell = $(this).closest('.editable-date');
+				$(this).hide();
+				cell.find('.date-display').show();
+				cell.find('.edit-date-btn').html('<i class="fas fa-pencil-alt"></i>');
+			}
+		});
+
+		// Save on Enter key
+		$('.date-input').on('keydown', function(e) {
+			if (e.key === 'Enter') {
+				$(this).closest('.editable-date').find('.edit-date-btn').click();
+			}
+		});
 	});
 </script>
+
+<style>
+	.editable-date {
+		position: relative;
+	}
+	.editable-date .edit-date-btn {
+		margin-left: 8px;
+		padding: 2px 6px;
+		font-size: 11px;
+	}
+	.editable-date .date-input {
+		display: inline-block;
+		width: auto;
+		font-size: 13px;
+		padding: 4px 8px;
+	}
+	.editable-date .date-display {
+		display: inline-block;
+		min-width: 100px;
+	}
+	.total-weeks-cell {
+		font-weight: bold;
+		color: #2196F3;
+	}
+</style>

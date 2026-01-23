@@ -41,8 +41,8 @@
                         $array[''] = translate('select');
                         foreach ($result as $row) {
                             if ($row['term_id'] != 0) {
-                                $term = $this->db->select('name')->where('id', $row['term_id'])->get('exam_term')->row()->name;
-                                $name = $row['name'] . ' (' . $term . ')';
+                                $term_name = get_term_name($row['term_id']);
+                                $name = $row['name'] . ' (' . $term_name . ')';
                             } else {
                                 $name = $row['name'];
                             }

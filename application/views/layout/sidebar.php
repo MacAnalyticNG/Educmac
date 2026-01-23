@@ -996,13 +996,17 @@
                                             <i class="fas fa-flask"></i> <span><?= translate('exam') ?></span>
                                         </a>
                                         <ul class="nav nav-children">
-                                            <?php if (get_permission('exam_term', 'is_view')) {  ?>
+                                            <?php
+                                            // DEPRECATED: Exam term management moved to Sessions module
+                                            // Terms are now managed via Sessions > View Terms
+                                            // Uncomment below to show deprecated menu (will redirect to Sessions)
+                                            /* if (get_permission('exam_term', 'is_view')) {  ?>
                                                 <li class="<?php if ($sub_page == 'exam/term') echo 'nav-active'; ?>">
                                                     <a href="<?= base_url('exam/term') ?>">
-                                                        <span><?= translate('exam_term') ?></span>
+                                                        <span><?= translate('exam_term') ?> (<?= translate('deprecated') ?>)</span>
                                                     </a>
                                                 </li>
-                                            <?php }
+                                            <?php } */
                                             if (get_permission('exam_hall', 'is_view')) { ?>
                                                 <li class="<?php if ($sub_page == 'exam/hall') echo 'nav-active'; ?>">
                                                     <a href="<?= base_url('exam/hall') ?>">

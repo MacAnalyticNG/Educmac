@@ -26,7 +26,14 @@
 						<label class="col-md-3 control-label"><?= translate('term') ?></label>
 						<div class="col-md-6">
 							<?php
-							$array = $this->app_lib->getSelectByBranch('exam_term', $exam['branch_id']);
+							// Get academic terms for current session and branch
+							$terms = get_session_terms($exam['session_id'], $exam['branch_id']);
+							$array = array('' => translate('select'));
+							if (!empty($terms)) {
+								foreach ($terms as $term) {
+									$array[$term->id] = $term->term_name;
+								}
+							}
 							echo form_dropdown("term_id", $array, $exam['term_id'], "class='form-control' id='term_id'
 									data-plugin-selectTwo data-width='100%' data-minimum-results-for-search='Infinity' ");
 							?>

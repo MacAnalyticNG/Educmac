@@ -31,8 +31,8 @@ class Ajax extends MY_Controller
                 $html .= '<option value="">' . translate('select') . '</option>';
                 foreach ($result as $row) {
                     if ($row['term_id'] != 0) {
-                        $term = $this->db->select('name')->where('id', $row['term_id'])->get('exam_term')->row()->name;
-                        $name = $row['name'] . ' (' . $term . ')';
+                        $term_name = get_term_name($row['term_id']);
+                        $name = $row['name'] . ' (' . $term_name . ')';
                     } else {
                         $name = $row['name'];
                     }
@@ -110,6 +110,34 @@ class Ajax extends MY_Controller
         } else {
             $html .= '<option value="">' . translate('select_branch_first') . '</option>';
         }
+        echo $html;
+    }
+
+    /**
+     * Get academic terms by branch for AJAX dropdown
+     * Replaces old exam_term functionality
+     */
+    public function getAcademicTermsByBranch()
+    {
+        $html = "";
+        $branch_id = $this->application_model->get_branch_id();
+
+        if (!empty($branch_id)) {
+            // Get terms for current session and branch
+            $terms = get_session_terms(get_session_id(), $branch_id);
+
+            if (!empty($terms)) {
+                $html .= "<option value=''>" . translate('select') . "</option>";
+                foreach ($terms as $term) {
+                    $html .= '<option value="' . $term->id . '">' . $term->term_name . '</option>';
+                }
+            } else {
+                $html .= '<option value="">' . translate('no_information_available') . '</option>';
+            }
+        } else {
+            $html .= '<option value="">' . translate('select_branch_first') . '</option>';
+        }
+
         echo $html;
     }
 

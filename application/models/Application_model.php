@@ -207,8 +207,8 @@ class Application_model extends CI_Model
     {
         $getExam = $this->db->get_where('exam', array('id' => $exam_id))->row_array();
         if (!empty($getExam['term_id'])) {
-            $getTerm = $this->db->get_where('exam_term', array('id' => $getExam['term_id']))->row_array();
-            return $getExam['name'] . ' (' . $getTerm['name'] . ')';
+            $term_name = get_term_name($getExam['term_id']);
+            return $getExam['name'] . ' (' . $term_name . ')';
         } else {
             return $getExam['name'];
         }

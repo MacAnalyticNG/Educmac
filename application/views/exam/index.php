@@ -47,7 +47,7 @@
 										echo translate('marks_and_grade');
 									}
 									?></td>
-								<td><?php echo (empty($row['term_id']) ? 'N/A' : get_type_name_by_id('exam_term', $row['term_id'])); ?></td>
+								<td><?php echo (empty($row['term_id']) ? 'N/A' : get_term_name($row['term_id'])); ?></td>
 								<td><?php
 									$distribution = json_decode($row['mark_distribution'], true);
 									if (!empty($distribution)) {
@@ -118,7 +118,14 @@
 							<label class="col-md-3 control-label"><?= translate('term') ?></label>
 							<div class="col-md-6">
 								<?php
-								$array = $this->app_lib->getSelectByBranch('exam_term', $branch_id);
+								// Get academic terms for current session and branch
+								$terms = get_session_terms(get_session_id(), $branch_id);
+								$array = array('' => translate('select'));
+								if (!empty($terms)) {
+									foreach ($terms as $term) {
+										$array[$term->id] = $term->term_name;
+									}
+								}
 								echo form_dropdown("term_id", $array, set_value('term_id'), "class='form-control' id='term_id'
 									data-plugin-selectTwo data-width='100%' data-minimum-results-for-search='Infinity' ");
 								?>
@@ -205,11 +212,10 @@
 		$(document).on('change', '#branch_id', function() {
 			var branchID = $(this).val();
 			$.ajax({
-				url: "<?= base_url('ajax/getDataByBranch') ?>",
+				url: "<?= base_url('ajax/getAcademicTermsByBranch') ?>",
 				type: 'POST',
 				data: {
-					branch_id: branchID,
-					table: 'exam_term'
+					branch_id: branchID
 				},
 				success: function(data) {
 					$('#term_id').html(data);

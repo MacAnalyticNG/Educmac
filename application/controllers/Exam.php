@@ -112,86 +112,35 @@ class Exam extends Admin_Controller
         $this->db->delete('exam');
     }
 
-    /* term form validation rules */
-    protected function term_validation()
-    {
-        if (is_superadmin_loggedin()) {
-            $this->form_validation->set_rules('branch_id', translate('branch'), 'required');
-        }
-        $this->form_validation->set_rules('term_name', translate('name'), 'trim|required|callback_unique_term');
-    }
-
-    // exam term information are prepared and stored in the database here
+    /**
+     * DEPRECATED: Term management moved to Sessions module
+     * Redirects to Sessions page where terms are managed centrally
+     */
     public function term()
     {
-        if (isset($_POST['save'])) {
-            if (!get_permission('exam_term', 'is_add')) {
-                access_denied();
-            }
-            $this->term_validation();
-            if ($this->form_validation->run() !== false) {
-                //save exam term information in the database file
-                $this->exam_model->termSave($this->input->post());
-                set_alert('success', translate('information_has_been_saved_successfully'));
-                redirect(current_url());
-            }
-        }
-        $this->data['termlist'] = $this->app_lib->getTable('exam_term');
-        $this->data['sub_page'] = 'exam/term';
-        $this->data['main_menu'] = 'exam';
-        $this->data['title'] = translate('exam_term');
-        $this->load->view('layout/index', $this->data);
+        set_alert('info', 'Term management has been moved to the Sessions module. Please manage terms from the Sessions page.');
+        redirect(base_url('sessions'));
     }
 
+    /**
+     * DEPRECATED: Term editing moved to Sessions module
+     */
     public function term_edit()
     {
-        if ($_POST) {
-            if (!get_permission('exam_term', 'is_edit')) {
-                ajax_access_denied();
-            }
-            $this->term_validation();
-            if ($this->form_validation->run() !== false) {
-                //save exam term information in the database file
-                $this->exam_model->termSave($this->input->post());
-                set_alert('success', translate('information_has_been_updated_successfully'));
-                $url = base_url('exam/term');
-                $array = array('status' => 'success', 'url' => $url, 'error' => '');
-            } else {
-                $error = $this->form_validation->error_array();
-                $array = array('status' => 'fail', 'url' => '', 'error' => $error);
-            }
-            echo json_encode($array);
-        }
+        echo json_encode([
+            'status' => 'fail',
+            'url' => base_url('sessions'),
+            'error' => array('general' => 'Term management has been moved to the Sessions module.')
+        ]);
     }
 
+    /**
+     * DEPRECATED: Term deletion moved to Sessions module
+     */
     public function term_delete($id)
     {
-        if (!get_permission('exam_term', 'is_delete')) {
-            access_denied();
-        }
-        if (!is_superadmin_loggedin()) {
-            $this->db->where('branch_id', get_loggedin_branch_id());
-        }
-        $this->db->where('id', $id);
-        $this->db->delete('exam_term');
-    }
-
-    /* unique valid exam term name verification is done here */
-    public function unique_term($name)
-    {
-        $branchID = $this->application_model->get_branch_id();
-        $term_id = $this->input->post('term_id');
-        if (!empty($term_id)) {
-            $this->db->where_not_in('id', $term_id);
-        }
-        $this->db->where(array('name' => $name, 'branch_id' => $branchID));
-        $uniform_row = $this->db->get('exam_term')->num_rows();
-        if ($uniform_row == 0) {
-            return true;
-        } else {
-            $this->form_validation->set_message("unique_term", translate('already_taken'));
-            return false;
-        }
+        set_alert('info', 'Term management has been moved to the Sessions module. Please manage terms from the Sessions page.');
+        redirect(base_url('sessions'));
     }
 
     public function mark_distribution()

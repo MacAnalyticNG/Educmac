@@ -319,7 +319,7 @@
 		<?php
 				$count = 1;
 				foreach ($exams as $row):
-					$exam_name = $row['exam_name'] . (empty($row['term_id']) ? '' : " (" . get_type_name_by_id('exam_term', $row['term_id']) . ")");
+					$exam_name = $row['exam_name'] . (empty($row['term_id']) ? '' : " (" . get_term_name($row['term_id']) . ")");
 		?>
 			<tr>
 				<td><?php echo $count++ ?></td>

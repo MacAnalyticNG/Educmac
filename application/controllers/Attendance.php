@@ -47,23 +47,27 @@ class Attendance extends Admin_Controller
         }
 
         $branchID = $this->application_model->get_branch_id();
+        $termID = get_active_term_id();
+
         if (isset($_POST['search'])) {
             if (is_superadmin_loggedin()) {
                 $this->form_validation->set_rules('branch_id', translate('branch'), 'required');
             }
             $this->form_validation->set_rules('class_id', translate('class'), 'required');
             $this->form_validation->set_rules('section_id', translate('section'), 'required');
-            $this->form_validation->set_rules('date', translate('date'), 'trim|required|callback_check_weekendday|callback_check_holiday|callback_get_valid_date');
+            $this->form_validation->set_rules('date', translate('date'), 'trim|required|callback_check_weekendday|callback_check_holiday|callback_get_valid_date|callback_check_term_date');
             if ($this->form_validation->run() == true) {
                 $classID = $this->input->post('class_id');
                 $sectionID = $this->input->post('section_id');
                 $date = $this->input->post('date');
                 $this->data['date'] = $date;
-                $this->data['attendencelist'] = $this->attendance_model->getStudentAttendence($classID, $sectionID, $date, $branchID);
+                $this->data['attendencelist'] = $this->attendance_model->getStudentAttendence($classID, $sectionID, $date, $branchID, $termID);
             }
         }
         $this->data['getWeekends'] = $this->application_model->getWeekends($branchID);
         $this->data['getHolidays'] = $this->attendance_model->getHolidays($branchID);
+        $this->data['active_term'] = get_active_term();
+
         if (isset($_POST['save'])) {
             $attendance = $this->input->post('attendance');
             $date = $this->input->post('date');
@@ -75,6 +79,7 @@ class Attendance extends Admin_Controller
                     'status' => $attStatus,
                     'remark' => $value['remark'],
                     'date' => $date,
+                    'term_id' => $termID,
                     'branch_id' => $branchID,
                 );
                 if (empty($value['attendance_id'])) {
@@ -420,6 +425,38 @@ class Attendance extends Admin_Controller
                 return true;
             }
         }
+        return true;
+    }
+
+    /**
+     * Validate that the selected date falls within the active term's date range
+     */
+    public function check_term_date($date)
+    {
+        $active_term = get_active_term();
+
+        if (!$active_term) {
+            // No active term found - allow date selection
+            return true;
+        }
+
+        $selected_date = strtotime($date);
+        $term_start = strtotime($active_term->start_date);
+        $term_end = strtotime($active_term->end_date);
+
+        if ($selected_date < $term_start || $selected_date > $term_end) {
+            $this->form_validation->set_message(
+                'check_term_date',
+                sprintf(
+                    'The selected date must be within the active term (%s: %s to %s).',
+                    $active_term->term_name,
+                    date('M d, Y', $term_start),
+                    date('M d, Y', $term_end)
+                )
+            );
+            return false;
+        }
+
         return true;
     }
 }

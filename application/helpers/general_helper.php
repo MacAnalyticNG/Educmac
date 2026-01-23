@@ -989,3 +989,111 @@ function academic_terms_enabled()
     $ci = &get_instance();
     return $ci->db->table_exists('academic_terms');
 }
+
+/**
+ * Get the active term ID for a session/branch
+ * Supports manually set term via session variable
+ *
+ * @param int|null $session_id Session ID (defaults to current session)
+ * @param int|null $branch_id Branch ID (defaults to current branch)
+ * @return int|null Active term ID or null
+ */
+if (!function_exists('get_active_term_id')) {
+    function get_active_term_id($session_id = null, $branch_id = null)
+    {
+        $ci = &get_instance();
+
+        if (!$session_id) {
+            $session_id = get_session_id();
+        }
+
+        if (!$branch_id) {
+            $branch_id = $ci->application_model->get_branch_id();
+        }
+
+        if (!$ci->db->table_exists('academic_terms')) {
+            return null;
+        }
+
+        if (empty($session_id) || empty($branch_id)) {
+            return null;
+        }
+
+        // Check if term is manually set in session
+        $manually_set_term_id = $ci->session->userdata('manually_set_term_id');
+        if (!empty($manually_set_term_id)) {
+            $term = $ci->db->get_where('academic_terms', [
+                'id' => $manually_set_term_id,
+                'session_id' => $session_id,
+                'branch_id' => $branch_id
+            ])->row();
+
+            if ($term) {
+                return $term->id;
+            }
+        }
+
+        // Get active term
+        $term = $ci->db->get_where('academic_terms', [
+            'session_id' => $session_id,
+            'branch_id' => $branch_id,
+            'is_active' => 1
+        ])->row();
+
+        return $term ? $term->id : null;
+    }
+}
+
+/**
+ * Get the active term object for a session/branch
+ * Supports manually set term via session variable
+ *
+ * @param int|null $session_id Session ID (defaults to current session)
+ * @param int|null $branch_id Branch ID (defaults to current branch)
+ * @return object|null Active term object or null
+ */
+if (!function_exists('get_active_term')) {
+    function get_active_term($session_id = null, $branch_id = null)
+    {
+        $ci = &get_instance();
+
+        if (!$session_id) {
+            $session_id = get_session_id();
+        }
+
+        if (!$branch_id) {
+            $branch_id = $ci->application_model->get_branch_id();
+        }
+
+        if (!$ci->db->table_exists('academic_terms')) {
+            return null;
+        }
+
+        if (empty($session_id) || empty($branch_id)) {
+            return null;
+        }
+
+        // Check if term is manually set in session
+        $manually_set_term_id = $ci->session->userdata('manually_set_term_id');
+        if (!empty($manually_set_term_id)) {
+            $term = $ci->db->get_where('academic_terms', [
+                'id' => $manually_set_term_id,
+                'session_id' => $session_id,
+                'branch_id' => $branch_id
+            ])->row();
+
+            if ($term) {
+                return $term;
+            }
+        }
+
+        // Get active term
+        $term = $ci->db->get_where('academic_terms', [
+            'session_id' => $session_id,
+            'branch_id' => $branch_id,
+            'is_active' => 1
+        ])->row();
+
+        return $term;
+    }
+}
