@@ -47,9 +47,26 @@ $widget = (is_superadmin_loggedin() ? 3 : 4);
 					</div>
 					<div class="col-md-<?php echo $widget; ?> mb-sm">
 						<div class="form-group">
+							<label class="control-label"><?=translate('term')?> <span class="required">*</span></label>
+							<?php
+								$terms = get_session_terms(get_session_id(), $branch_id);
+								$arrayTerm = array('' => translate('select'));
+								if (!empty($terms)) {
+									foreach ($terms as $term) {
+										$arrayTerm[$term->id] = $term->term_name;
+									}
+								}
+								echo form_dropdown("term_id", $arrayTerm, set_value('term_id', isset($active_term) ? $active_term->id : ''), "class='form-control' id='term_id'
+								data-plugin-selectTwo data-width='100%' ");
+							?>
+							<span class="error"></span>
+						</div>
+					</div>
+					<div class="col-md-<?php echo $widget; ?> mb-sm">
+						<div class="form-group">
 							<label class="control-label"><?=translate('fees_type')?> <span class="required">*</span></label>
 							<select data-plugin-selectTwo class="form-control" name="fees_type" id="feesType">
-								
+
 							</select>
 							<span class="error"></span>
 						</div>
@@ -120,6 +137,7 @@ $widget = (is_superadmin_loggedin() ? 3 : 4);
 			d.branch_id = $('#branch_id').val();
 			d.class_id = $('#class_id').val();
 			d.section_id = $('#section_id').val();
+			d.term_id = $('#term_id').val();
 			d.fees_type = $('#feesType').val();
 			d.submit_btn = searchBtn;
 		};
@@ -192,8 +210,30 @@ $widget = (is_superadmin_loggedin() ? 3 : 4);
 			var branchID = $(this).val();
 			getClassByBranch(branchID);
 			getTypeByBranch(branchID);
-
+			getTermsByBranch(branchID);
 		});
+
+		// Load terms for the selected branch
+		function getTermsByBranch(branch_id) {
+			$.ajax({
+				url: base_url + 'ajax/getAcademicTermsByBranch',
+				type: 'POST',
+				data: { branch_id: branch_id },
+				beforeSend: function () {
+					if ($('#select2-term_id-container').length) {
+						$('#select2-term_id-container').parent().addClass('select2loading');
+					}
+				},
+				success: function (data) {
+					$('#term_id').html(data);
+				},
+				complete: function () {
+					if ($('#select2-term_id-container').length) {
+						$('#select2-term_id-container').parent().removeClass('select2loading');
+					}
+				}
+			});
+		}
 
 		function getTypeByBranch(branchID, typeID) {
 		    $.ajax({

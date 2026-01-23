@@ -14,13 +14,30 @@
 							<label class="control-label"><?=translate('branch')?> <span class="required">*</span></label>
 							<?php
 								$arrayBranch = $this->app_lib->getSelectList('branch');
-								echo form_dropdown("branch_id", $arrayBranch, set_value('branch_id'), "class='form-control' id='branch_id' onchange='getClassByBranch(this.value)'
+								echo form_dropdown("branch_id", $arrayBranch, set_value('branch_id'), "class='form-control' id='branch_id' onchange='getBranchData(this.value)'
 								data-plugin-selectTwo data-width='100%'");
 							?>
 							<span class="error"></span>
 						</div>
 					</div>
 				<?php endif; ?>
+					<div class="col-md-<?php echo $widget; ?> mb-sm">
+						<div class="form-group">
+							<label class="control-label"><?=translate('term')?> <span class="required">*</span></label>
+							<?php
+								$arrayTerms = array('' => translate('select'));
+								if (!empty($terms)) {
+									foreach ($terms as $term) {
+										$active_label = $term->is_active ? ' (' . translate('active') . ')' : '';
+										$arrayTerms[$term->id] = $term->term_name . $active_label;
+									}
+								}
+								echo form_dropdown("term_id", $arrayTerms, set_value('term_id'), "class='form-control' id='term_id'
+								data-plugin-selectTwo data-width='100%'");
+							?>
+							<span class="error"></span>
+						</div>
+					</div>
 					<div class="col-md-<?php echo $widget; ?> mb-sm">
 						<div class="form-group">
 							<label class="control-label"><?=translate('class')?></label>
@@ -110,6 +127,7 @@
 	$(document).ready(function () {
 		let filter = function (d) {
 			d.branch_id = $('#branch_id').val();
+			d.term_id = $('#term_id').val();
 			d.class_id = $('#class_id').val();
 			d.section_id = $('#section_id').val();
 			d.submit_btn = searchBtn;
@@ -240,6 +258,32 @@
 	        }
 	    });
 	});
+
+	// Load terms and classes when branch changes
+	function getBranchData(branch_id) {
+		// Load classes
+		getClassByBranch(branch_id);
+
+		// Load terms for the selected branch
+		$.ajax({
+			url: base_url + 'ajax/getAcademicTermsByBranch',
+			type: 'POST',
+			data: { branch_id: branch_id },
+			beforeSend: function () {
+				if ($('#select2-term_id-container').length) {
+					$('#select2-term_id-container').parent().addClass('select2loading');
+				}
+			},
+			success: function (data) {
+				$('#term_id').html(data);
+			},
+			complete: function () {
+				if ($('#select2-term_id-container').length) {
+					$('#select2-term_id-container').parent().removeClass('select2loading');
+				}
+			}
+		});
+	}
 
    function pdf_sendByemail(enrollID = '', ele) 
    {

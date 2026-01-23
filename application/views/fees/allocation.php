@@ -42,6 +42,22 @@
 					</div>
 					<div class="col-md-<?php echo $widget; ?> mb-sm">
 						<div class="form-group">
+							<label class="control-label"><?=translate('term')?> <span class="required">*</span></label>
+							<?php
+								$terms = get_session_terms(get_session_id(), $branch_id);
+								$arrayTerm = array('' => translate('select'));
+								if (!empty($terms)) {
+									foreach ($terms as $term) {
+										$arrayTerm[$term->id] = $term->term_name;
+									}
+								}
+								echo form_dropdown("term_id", $arrayTerm, set_value('term_id', isset($active_term) ? $active_term->id : ''), "class='form-control' id='term_id' required
+								data-plugin-selectTwo data-width='100%' data-minimum-results-for-search='Infinity' ");
+							?>
+						</div>
+					</div>
+					<div class="col-md-<?php echo $widget; ?> mb-sm">
+						<div class="form-group">
 							<label class="control-label"><?=translate('fee_group')?> <span class="required">*</span></label>
 							<?php
 								$arrayGroup = $this->app_lib->getSelectByBranch('fee_groups', $branch_id, false, array('system' => 0, 'session_id' => get_session_id()));
@@ -67,6 +83,7 @@
 			<?php echo form_open('fees/allocation_save',  array('class' => 'frm-submit-msg'));?>
 			<input type="hidden" name="fee_group_id" value="<?=$fee_group_id; ?>" >
 			<input type="hidden" name="branch_id" value="<?=$branch_id; ?>" >
+			<input type="hidden" name="term_id" value="<?=isset($term_id) ? $term_id : ''; ?>" >
 			<header class="panel-heading">
 				<h4 class="panel-title"><i class="fas fa-list"></i> <?php echo translate('student_list');?></h4>
 			</header>
@@ -148,6 +165,27 @@
 		        success: function (data) {
 		            $('#groupID').html(data);
 		        }
+		    });
+		    // Load terms for the selected branch
+		    $.ajax({
+		        url: base_url + 'ajax/getAcademicTermsByBranch',
+		        type: 'POST',
+		        data: {
+		            'branch_id' : branchID,
+		        },
+				beforeSend: function () {
+					if ($('#select2-term_id-container').length) {
+						$('#select2-term_id-container').parent().addClass('select2loading');
+					}
+				},
+		        success: function (data) {
+		            $('#term_id').html(data);
+		        },
+				complete: function () {
+					if ($('#select2-term_id-container').length) {
+						$('#select2-term_id-container').parent().removeClass('select2loading');
+					}
+				}
 		    });
 		});
 	});

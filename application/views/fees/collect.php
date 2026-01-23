@@ -5,6 +5,45 @@ if ($extINTL == true) {
 	$spellout = new NumberFormatter("en", NumberFormatter::SPELLOUT);
 }
 ?>
+
+<?php if (!empty($terms) && count($terms) > 1): ?>
+	<style>
+		.term-switcher-container {
+			background: #f5f5f5;
+			padding: 10px 15px;
+			margin-bottom: 15px;
+			border-radius: 4px;
+			border: 1px solid #ddd;
+		}
+		.term-switcher-container select {
+			min-height: 35px;
+			padding: 6px 12px;
+		}
+		.term-switcher-label {
+			font-weight: 600;
+			margin-right: 10px;
+			display: inline-block;
+			line-height: 35px;
+		}
+	</style>
+	<div class="row hidden-print">
+		<div class="col-md-12">
+			<div class="term-switcher-container">
+				<span class="term-switcher-label"><?= translate('select_term') ?>:</span>
+				<select name="term_id" id="term_selector" class="form-control" style="display: inline-block; width: auto; min-width: 250px;"
+						onchange="window.location.href='<?= base_url('fees/invoice/' . $basic['enroll_id']) ?>?term_id=' + this.value">
+					<?php foreach ($terms as $term): ?>
+						<option value="<?= $term->id ?>" <?= ($selected_term_id == $term->id) ? 'selected' : '' ?>>
+							<?= $term->term_name ?>
+							<?= $term->is_active ? ' (' . translate('active') . ')' : '' ?>
+						</option>
+					<?php endforeach; ?>
+				</select>
+			</div>
+		</div>
+	</div>
+<?php endif; ?>
+
 <section class="panel">
 	<div class="tabs-custom">
 		<ul class="nav nav-tabs">
@@ -60,6 +99,12 @@ if ($extINTL == true) {
 											echo "<span class='value label " . $labelmode . " '>" . $status . "</span>";
 										?>
 									</p>
+									<?php if (isset($active_term) && $active_term): ?>
+									<p class="mb-none">
+										<span class="text-dark"><?=translate('term')?> : </span>
+										<span class="value label label-info"><?= $active_term->term_name ?></span>
+									</p>
+									<?php endif; ?>
 								</div>
 							</div>
 						</header>

@@ -67,9 +67,16 @@ class Fees_model extends MY_Model
         }
     }
 
-    public function getStudentAllocationList($classID = '', $sectionID = '', $groupID = '', $branchID = '')
+    public function getStudentAllocationList($classID = '', $sectionID = '', $groupID = '', $branchID = '', $termID = null)
     {
-        $sql = "SELECT e.*, s.photo, CONCAT_WS(' ',s.first_name, s.last_name) as fullname, s.gender, s.register_no, s.parent_id, s.email, s.mobileno, IFNULL(fa.id, 0) as allocation_id FROM enroll as e INNER JOIN student as s ON e.student_id = s.id LEFT JOIN login_credential as l ON l.user_id = s.id AND l.role = '7' LEFT JOIN fee_allocation as fa ON fa.student_id = e.id AND fa.group_id = " . $this->db->escape($groupID) . " AND fa.session_id= " . $this->db->escape(get_session_id()) . " WHERE e.class_id = " . $this->db->escape($classID) . " AND e.branch_id = " . $this->db->escape($branchID) . " AND e.session_id = " . $this->db->escape(get_session_id());
+        $sql = "SELECT e.*, s.photo, CONCAT_WS(' ',s.first_name, s.last_name) as fullname, s.gender, s.register_no, s.parent_id, s.email, s.mobileno, IFNULL(fa.id, 0) as allocation_id FROM enroll as e INNER JOIN student as s ON e.student_id = s.id LEFT JOIN login_credential as l ON l.user_id = s.id AND l.role = '7' LEFT JOIN fee_allocation as fa ON fa.student_id = e.id AND fa.group_id = " . $this->db->escape($groupID) . " AND fa.session_id= " . $this->db->escape(get_session_id());
+
+        // Add term_id filter if provided
+        if (!empty($termID)) {
+            $sql .= " AND fa.term_id = " . $this->db->escape($termID);
+        }
+
+        $sql .= " WHERE e.class_id = " . $this->db->escape($classID) . " AND e.branch_id = " . $this->db->escape($branchID) . " AND e.session_id = " . $this->db->escape(get_session_id());
         if ($sectionID != 'all') {
             $sql .= " AND e.section_id =" . $this->db->escape($sectionID);
         }
@@ -77,12 +84,18 @@ class Fees_model extends MY_Model
         return $this->db->query($sql)->result_array();
     }
 
-    public function getInvoiceStatus($enrollID = '')
+    public function getInvoiceStatus($enrollID = '', $termID = null)
     {
 
         $status = "";
         $sessionID = get_session_id();
         $sql = "SELECT SUM(`fee_groups_details`.`amount` + `fee_allocation`.`prev_due`) as `total`, min(`fee_allocation`.`id`) as `inv_no` FROM `fee_allocation` LEFT JOIN `fee_groups_details` ON `fee_groups_details`.`fee_groups_id` = `fee_allocation`.`group_id` LEFT JOIN `fees_type` ON `fees_type`.`id` = `fee_groups_details`.`fee_type_id` WHERE `fee_allocation`.`student_id` = " . $this->db->escape($enrollID) . " AND `fee_allocation`.`session_id` = " . $this->db->escape($sessionID);
+
+        // Add term_id filter if provided
+        if (!empty($termID)) {
+            $sql .= " AND `fee_allocation`.`term_id` = " . $this->db->escape($termID);
+        }
+
         $balance = $this->db->query($sql)->row_array();
         $invNo = empty($balance['inv_no']) ? 0 : str_pad($balance['inv_no'], 4, '0', STR_PAD_LEFT);
 
@@ -221,7 +234,7 @@ class Fees_model extends MY_Model
         }
     }
 
-    public function getInvoiceList()
+    public function getInvoiceList($term_id = null)
     {
         $branchID = $this->application_model->get_branch_id();
         $class_id = $this->input->post('class_id');
@@ -240,6 +253,10 @@ class Fees_model extends MY_Model
         $this->datatables->where('fa.session_id', get_session_id());
         $this->datatables->where('s.active', 1);
         $this->datatables->where('fa.branch_id', $branchID);
+        // Add term filter if provided
+        if (!empty($term_id)) {
+            $this->datatables->where('fa.term_id', $term_id);
+        }
         if (!empty($class_id)) {
             $this->datatables->where('e.class_id', $class_id);
         }
@@ -322,7 +339,7 @@ class Fees_model extends MY_Model
         return json_encode($json_data);
     }
 
-    public function getDueInvoiceDT_list($class_id = '', $section_id = '', $feegroup_id = '', $fee_feetype_id = '')
+    public function getDueInvoiceDT_list($class_id = '', $section_id = '', $feegroup_id = '', $fee_feetype_id = '', $term_id = null)
     {
         $get_session_id = get_session_id();
         if ($feegroup_id == 'transport') {
@@ -334,6 +351,10 @@ class Fees_model extends MY_Model
             $this->datatables->join('enroll as e', 'e.id = fa.enroll_id', 'inner');;
             $this->datatables->where('fa.transport_fee_fine_id', $fee_feetype_id);
             $this->datatables->where('sp.session_id', $get_session_id);
+            // Add term filter for transport fees if provided
+            if (!empty($term_id)) {
+                $this->datatables->where('fa.term_id', $term_id);
+            }
             $this->datatables->group_by('fa.enroll_id');
             $this->datatables->search_value('s.first_name,s.register_no,e.roll,s.mobileno,ff.due_date');
         } else {
@@ -344,6 +365,10 @@ class Fees_model extends MY_Model
             $this->datatables->join('enroll as e', 'e.id = fa.student_id', 'inner');
             $this->datatables->where('fa.group_id', $feegroup_id);
             $this->datatables->where('fa.session_id', $get_session_id);
+            // Add term filter if provided
+            if (!empty($term_id)) {
+                $this->datatables->where('fa.term_id', $term_id);
+            }
             $this->datatables->group_by('fa.student_id');
             $this->datatables->search_value('s.first_name,s.register_no,e.roll,s.mobileno,gd.due_date');
         }
@@ -882,5 +907,89 @@ class Fees_model extends MY_Model
         $this->db->where('h.transport_fee_details_id', $transport_fee_details_id);
         $this->db->order_by('h.id', 'asc');
         return $this->db->get()->result_array();
+    }
+
+    /**
+     * Get current active term for a session and branch
+     *
+     * @param int|null $session_id Session ID (defaults to current session)
+     * @param int|null $branch_id Branch ID (defaults to current branch)
+     * @return object|null Term object or null if not found
+     */
+    public function get_current_term($session_id = null, $branch_id = null)
+    {
+        if (!$session_id) {
+            $session_id = get_session_id();
+        }
+        if (!$branch_id) {
+            $branch_id = $this->application_model->get_branch_id();
+        }
+
+        // Check manually set term first
+        $manually_set_term_id = $this->session->userdata('manually_set_term_id');
+        if (!empty($manually_set_term_id)) {
+            $term = $this->db->get_where('academic_terms', [
+                'id' => $manually_set_term_id,
+                'session_id' => $session_id,
+                'branch_id' => $branch_id
+            ])->row();
+            if ($term) {
+                return $term;
+            }
+        }
+
+        // Get active term
+        return $this->db->get_where('academic_terms', [
+            'session_id' => $session_id,
+            'branch_id' => $branch_id,
+            'is_active' => 1
+        ])->row();
+    }
+
+    /**
+     * Get all terms for a session and branch
+     *
+     * @param int $session_id Session ID
+     * @param int|null $branch_id Branch ID (defaults to current branch)
+     * @return array Array of term objects
+     */
+    public function get_session_terms($session_id, $branch_id = null)
+    {
+        if (!$branch_id) {
+            $branch_id = $this->application_model->get_branch_id();
+        }
+
+        return $this->db
+            ->where('session_id', $session_id)
+            ->where('branch_id', $branch_id)
+            ->order_by('term_order', 'ASC')
+            ->get('academic_terms')
+            ->result();
+    }
+
+    /**
+     * Get term by specific date
+     *
+     * @param string $date Date in Y-m-d format
+     * @param int|null $session_id Session ID (defaults to current session)
+     * @param int|null $branch_id Branch ID (defaults to current branch)
+     * @return object|null Term object or null if not found
+     */
+    public function get_term_by_date($date, $session_id = null, $branch_id = null)
+    {
+        if (!$session_id) {
+            $session_id = get_session_id();
+        }
+        if (!$branch_id) {
+            $branch_id = $this->application_model->get_branch_id();
+        }
+
+        return $this->db
+            ->where('session_id', $session_id)
+            ->where('branch_id', $branch_id)
+            ->where('start_date <=', $date)
+            ->where('end_date >=', $date)
+            ->get('academic_terms')
+            ->row();
     }
 }

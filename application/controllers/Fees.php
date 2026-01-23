@@ -405,12 +405,17 @@ class Fees extends Admin_Controller
             access_denied();
         }
         $branchID = $this->application_model->get_branch_id();
+
+        // Get active term for the form
+        $this->data['active_term'] = get_active_term();
+
         if (isset($_POST['search'])) {
             $this->data['class_id'] = $this->input->post('class_id');
             $this->data['section_id'] = $this->input->post('section_id');
             $this->data['fee_group_id'] = $this->input->post('fee_group_id');
+            $this->data['term_id'] = $this->input->post('term_id');
             $this->data['branch_id'] = $branchID;
-            $this->data['studentlist'] = $this->fees_model->getStudentAllocationList($this->data['class_id'], $this->data['section_id'], $this->data['fee_group_id'], $branchID);
+            $this->data['studentlist'] = $this->fees_model->getStudentAllocationList($this->data['class_id'], $this->data['section_id'], $this->data['fee_group_id'], $branchID, $this->data['term_id']);
         }
         if (isset($_POST['save'])) {
             $student_array = $this->input->post('stu_operations');
@@ -418,12 +423,15 @@ class Fees extends Admin_Controller
             $student_sel_array = isset($student_array) ? $student_array : array();
             $delStudent = array_diff($student_ids, $student_sel_array);
             $fee_groupID = $this->input->post('fee_group_id');
+            $termID = $this->input->post('term_id');
+
             foreach ($student_array as $key => $value) {
                 $arrayData = array(
                     'student_id' => $value,
                     'group_id' => $fee_groupID,
                     'session_id' => get_session_id(),
                     'branch_id' => $branchID,
+                    'term_id' => $termID,
                 );
                 $this->db->where($arrayData);
                 $q = $this->db->get('fee_allocation');
@@ -435,6 +443,7 @@ class Fees extends Admin_Controller
                 $this->db->where_in('student_id', $delStudent);
                 $this->db->where('group_id', $fee_groupID);
                 $this->db->where('session_id', get_session_id());
+                $this->db->where('term_id', $termID);
                 $this->db->delete('fee_allocation');
             }
             set_alert('success', translate('information_has_been_saved_successfully'));
@@ -459,6 +468,8 @@ class Fees extends Admin_Controller
             $student_sel_array = isset($student_array) ? $student_array : array();
             $delStudent = array_diff($student_ids, $student_sel_array);
             $fee_groupID = $this->input->post('fee_group_id');
+            $termID = $this->input->post('term_id');
+
             if (!empty($student_sel_array)) {
                 foreach ($student_array as $key => $value) {
                     $arrayData = array(
@@ -466,6 +477,7 @@ class Fees extends Admin_Controller
                         'group_id' => $fee_groupID,
                         'session_id' => get_session_id(),
                         'branch_id' => $branchID,
+                        'term_id' => $termID,
                     );
                     $this->db->where($arrayData);
                     $q = $this->db->get('fee_allocation');
@@ -478,6 +490,7 @@ class Fees extends Admin_Controller
                 $this->db->where_in('student_id', $delStudent);
                 $this->db->where('group_id', $fee_groupID);
                 $this->db->where('session_id', get_session_id());
+                $this->db->where('term_id', $termID);
                 $this->db->delete('fee_allocation');
             }
 
@@ -494,10 +507,15 @@ class Fees extends Admin_Controller
             access_denied();
         }
         $branchID = $this->application_model->get_branch_id();
+
+        // Get terms for dropdown
+        $this->data['terms'] = $this->fees_model->get_session_terms(get_session_id(), $branchID);
+
         if ($_POST) {
             if (is_superadmin_loggedin()) {
                 $this->form_validation->set_rules('branch_id', translate('branch'), 'trim|required');
             }
+            $this->form_validation->set_rules('term_id', translate('term'), 'trim|required');
             $this->form_validation->set_rules('class_id', translate('class'), 'trim');
             $this->form_validation->set_rules('section_id', translate('section'), 'trim');
             if ($this->form_validation->run() == true) {
@@ -506,7 +524,7 @@ class Fees extends Admin_Controller
             } else {
                 $error = $this->form_validation->error_array();
                 $array = array('status' => 'fail','error' => $error);
-                
+
             }
             echo json_encode($array);
             exit();
@@ -522,6 +540,7 @@ class Fees extends Admin_Controller
     {
         if ($_POST) {
             if (get_permission('invoice', 'is_view')) {
+                $term_id = $this->input->post('term_id');
                 $submit_btn = $this->input->post('submit_btn');
                 if (empty($submit_btn)) {
                     $json_data = array(
@@ -532,7 +551,7 @@ class Fees extends Admin_Controller
                     );
                     echo json_encode($json_data);
                 } else {
-                    echo $this->fees_model->getInvoiceList();
+                    echo $this->fees_model->getInvoiceList($term_id);
                 }
             }
         }
@@ -571,11 +590,23 @@ class Fees extends Admin_Controller
         if (empty($basic))
             redirect(base_url('dashboard'));
 
+        // Get term_id from GET parameter (term switcher)
+        $termID = $this->input->get('term_id');
+        $branchID = $basic['branch_id'];
+
+        // If no term specified, use current/active term
+        if (empty($termID)) {
+            $current_term = $this->fees_model->get_current_term(get_session_id(), $branchID);
+            $termID = !empty($current_term) ? $current_term->id : null;
+        }
+
         if (moduleIsEnabled('transport')) {
             $this->data['transport_fees'] = $this->fees_model->getStudentTransportFees($enrollID, $basic['stoppage_point_id']);
         }
-        $this->data['invoice'] = $this->fees_model->getInvoiceStatus($enrollID);
+        $this->data['invoice'] = $this->fees_model->getInvoiceStatus($enrollID, $termID);
         $this->data['basic'] = $basic;
+        $this->data['selected_term_id'] = $termID;
+        $this->data['terms'] = $this->fees_model->get_session_terms(get_session_id(), $branchID);
         $this->data['title'] = translate('invoice_history');
         $this->data['main_menu'] = 'fees';
         $this->data['sub_page'] = 'fees/collect';
@@ -654,12 +685,17 @@ class Fees extends Admin_Controller
             access_denied();
         }
         $branchID = $this->application_model->get_branch_id();
+
+        // Get active term for the form
+        $this->data['active_term'] = get_active_term();
+
         if ($_POST) {
                 if (is_superadmin_loggedin()) {
                     $this->form_validation->set_rules('branch_id', translate('branch'), 'trim|required');
                 }
                 $this->form_validation->set_rules('class_id', translate('class'), 'trim|required');
                 $this->form_validation->set_rules('section_id', translate('section'), 'trim|required');
+                $this->form_validation->set_rules('term_id', translate('term'), 'trim|required');
                 $this->form_validation->set_rules('fees_type', translate('fees_type'), 'trim|required');
                 if ($this->form_validation->run() == true) {
                     $export_title = get_type_name_by_id('branch', $branchID) . ' - ' . translate('due_invoice') . " " . translate('list');
@@ -685,6 +721,7 @@ class Fees extends Admin_Controller
                 $branchID = $this->application_model->get_branch_id();
                 $class_id = $this->input->post('class_id');
                 $section_id = $this->input->post('section_id');
+                $term_id = $this->input->post('term_id');
                 $submit_btn = $this->input->post('submit_btn');
 
                 if (empty($submit_btn)) {
@@ -700,7 +737,7 @@ class Fees extends Admin_Controller
                     $feegroup_id = $feegroup[0];
                     $fee_feetype_id = $feegroup[1];
 
-                    $results = $this->fees_model->getDueInvoiceDT_list($class_id, $section_id, $feegroup_id, $fee_feetype_id);
+                    $results = $this->fees_model->getDueInvoiceDT_list($class_id, $section_id, $feegroup_id, $fee_feetype_id, $term_id);
                     $records = array();
                     $records = json_decode($results);
                     $dt_data = array();

@@ -113,8 +113,18 @@ class Migration_create_academic_terms extends CI_Migration {
 	{
 		// Drop foreign key constraints first
 		if ($this->db->table_exists('academic_terms')) {
-			$this->db->query('ALTER TABLE `academic_terms` DROP FOREIGN KEY IF EXISTS `academic_terms_session_fk`');
-			$this->db->query('ALTER TABLE `academic_terms` DROP FOREIGN KEY IF EXISTS `academic_terms_branch_fk`');
+			// Check and drop foreign keys safely
+			$result = $this->db->query("
+				SELECT CONSTRAINT_NAME
+				FROM information_schema.KEY_COLUMN_USAGE
+				WHERE TABLE_NAME = 'academic_terms'
+				AND TABLE_SCHEMA = DATABASE()
+				AND CONSTRAINT_NAME IN ('academic_terms_session_fk', 'academic_terms_branch_fk')
+			");
+
+			foreach ($result->result() as $row) {
+				$this->db->query("ALTER TABLE `academic_terms` DROP FOREIGN KEY `{$row->CONSTRAINT_NAME}`");
+			}
 		}
 
 		// Drop table
