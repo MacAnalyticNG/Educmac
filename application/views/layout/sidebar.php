@@ -1385,6 +1385,13 @@
                                                 <span><i class="fas fa-caret-right"></i><?= translate('exam') ?></span>
                                             </a>
                                         </li>
+                                    <?php } 
+                                    if (get_permission('student_attendance', 'is_add')) { ?>
+                                        <li class="<?php if ($sub_page == 'attendance/export_import') echo 'nav-active'; ?>">
+                                            <a href="<?= base_url('attendance/export_import') ?>">
+                                                <span><i class="fas fa-file-import"></i><?= translate('import') ?>/<?= translate('export') ?></span>
+                                            </a>
+                                        </li>
                                     <?php } ?>
                                 </ul>
                             </li>
