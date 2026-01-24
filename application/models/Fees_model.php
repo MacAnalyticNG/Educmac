@@ -89,7 +89,12 @@ class Fees_model extends MY_Model
 
         $status = "";
         $sessionID = get_session_id();
-        $sql = "SELECT SUM(`fee_groups_details`.`amount` + `fee_allocation`.`prev_due`) as `total`, min(`fee_allocation`.`id`) as `inv_no` FROM `fee_allocation` LEFT JOIN `fee_groups_details` ON `fee_groups_details`.`fee_groups_id` = `fee_allocation`.`group_id` LEFT JOIN `fees_type` ON `fees_type`.`id` = `fee_groups_details`.`fee_type_id` WHERE `fee_allocation`.`student_id` = " . $this->db->escape($enrollID) . " AND `fee_allocation`.`session_id` = " . $this->db->escape($sessionID);
+        $sql = "SELECT SUM(`fee_groups_details`.`amount` + `fee_allocation`.`prev_due`) as `total`, min(`fee_allocation`.`id`) as `inv_no` FROM `fee_allocation`
+        LEFT JOIN `fee_groups_details` ON `fee_groups_details`.`fee_groups_id` = `fee_allocation`.`group_id`
+        LEFT JOIN `fees_type` ON `fees_type`.`id` = `fee_groups_details`.`fee_type_id`
+        LEFT JOIN `fee_student_exclusions` ON `fee_student_exclusions`.`allocation_id` = `fee_allocation`.`id` AND `fee_student_exclusions`.`fee_type_id` = `fee_groups_details`.`fee_type_id`
+        WHERE `fee_allocation`.`student_id` = " . $this->db->escape($enrollID) . " AND `fee_allocation`.`session_id` = " . $this->db->escape($sessionID) . "
+        AND `fee_student_exclusions`.`id` IS NULL";
 
         // Add term_id filter if provided
         if (!empty($termID)) {
@@ -137,8 +142,11 @@ class Fees_model extends MY_Model
     public function getInvoiceDetails($enrollID = '', $termID = null)
     {
         $sql = "SELECT `fee_allocation`.`group_id`,`fee_allocation`.`prev_due`,`fee_allocation`.`id` as `allocation_id`, `fees_type`.`name`, `fees_type`.`system`, `fee_groups_details`.`amount`, `fee_groups_details`.`due_date`, `fee_groups_details`.`fee_type_id` FROM `fee_allocation` LEFT JOIN
-        `fee_groups_details` ON `fee_groups_details`.`fee_groups_id` = `fee_allocation`.`group_id` LEFT JOIN `fees_type` ON `fees_type`.`id` = `fee_groups_details`.`fee_type_id` WHERE
-        `fee_allocation`.`student_id` = " . $this->db->escape($enrollID) . " AND `fee_allocation`.`session_id` = " . $this->db->escape(get_session_id());
+        `fee_groups_details` ON `fee_groups_details`.`fee_groups_id` = `fee_allocation`.`group_id` LEFT JOIN `fees_type` ON `fees_type`.`id` = `fee_groups_details`.`fee_type_id`
+        LEFT JOIN `fee_student_exclusions` ON `fee_student_exclusions`.`allocation_id` = `fee_allocation`.`id` AND `fee_student_exclusions`.`fee_type_id` = `fee_groups_details`.`fee_type_id`
+        WHERE
+        `fee_allocation`.`student_id` = " . $this->db->escape($enrollID) . " AND `fee_allocation`.`session_id` = " . $this->db->escape(get_session_id()) . "
+        AND `fee_student_exclusions`.`id` IS NULL";
 
         // Add term_id filter if provided
         if (!empty($termID)) {
@@ -1009,5 +1017,98 @@ class Fees_model extends MY_Model
             ->where('end_date >=', $date)
             ->get('academic_terms')
             ->row();
+    }
+
+    /**
+     * Check if a fee type is excluded for a student
+     */
+    public function isFeeTyeExcluded($allocation_id, $fee_type_id)
+    {
+        $count = $this->db->where('allocation_id', $allocation_id)
+            ->where('fee_type_id', $fee_type_id)
+            ->count_all_results('fee_student_exclusions');
+        return $count > 0;
+    }
+
+    /**
+     * Exclude a fee type from student's invoice
+     */
+    public function excludeFeeType($allocation_id, $fee_type_id)
+    {
+        // Get allocation record
+        $allocation = $this->db->get_where('fee_allocation', ['id' => $allocation_id])->row();
+        if (empty($allocation)) {
+            return false;
+        }
+
+        // Get enrollment record
+        $enroll = $this->db->get_where('enroll', ['id' => $allocation->student_id])->row();
+        if (empty($allocation)) {
+            return false;
+        }
+
+        // Check if already excluded
+        if ($this->isFeeTyeExcluded($allocation_id, $fee_type_id)) {
+            return false;
+        }
+
+        // Get term_id from allocation if available
+        $term_id = !empty($allocation->term_id) ? $allocation->term_id : null;
+
+        // Insert exclusion record
+        $data = [
+            'student_id' => $enroll->student_id,
+            'enroll_id' => $allocation->student_id,
+            'fee_type_id' => $fee_type_id,
+            'fee_group_id' => $allocation->group_id,
+            'allocation_id' => $allocation_id,
+            'session_id' => $allocation->session_id,
+            'branch_id' => get_loggedin_branch_id(),
+            'excluded_by' => get_loggedin_user_id(),
+            'term_id' => $term_id,
+        ];
+
+        return $this->db->insert('fee_student_exclusions', $data);
+    }
+
+    /**
+     * Remove a fee exclusion (restore fee to invoice)
+     */
+    public function removeFeeExclusion($allocation_id, $fee_type_id)
+    {
+        return $this->db->where('allocation_id', $allocation_id)
+            ->where('fee_type_id', $fee_type_id)
+            ->delete('fee_student_exclusions');
+    }
+
+    /**
+     * Get all exclusions for a student
+     */
+    public function getStudentExclusions($enroll_id)
+    {
+        return $this->db->where('enroll_id', $enroll_id)
+            ->get('fee_student_exclusions')
+            ->result();
+    }
+
+    /**
+     * Get student exclusions with fee details
+     */
+    public function getStudentExclusionsWithDetails($enroll_id, $term_id = null)
+    {
+        $this->db->select('fee_student_exclusions.*, fees_type.name as fee_type_name, fee_groups.name as fee_group_name, fee_groups_details.amount, academic_terms.term_name');
+        $this->db->from('fee_student_exclusions');
+        $this->db->join('fees_type', 'fees_type.id = fee_student_exclusions.fee_type_id', 'left');
+        $this->db->join('fee_groups', 'fee_groups.id = fee_student_exclusions.fee_group_id', 'left');
+        $this->db->join('fee_groups_details', 'fee_groups_details.fee_groups_id = fee_student_exclusions.fee_group_id AND fee_groups_details.fee_type_id = fee_student_exclusions.fee_type_id', 'left');
+        $this->db->join('academic_terms', 'academic_terms.id = fee_student_exclusions.term_id', 'left');
+        $this->db->where('fee_student_exclusions.enroll_id', $enroll_id);
+
+        if (!empty($term_id)) {
+            $this->db->where('fee_student_exclusions.term_id', $term_id);
+        }
+
+        $this->db->order_by('fee_student_exclusions.excluded_date', 'DESC');
+        return $this->db->get()->result();
     }
 }

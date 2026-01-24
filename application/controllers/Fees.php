@@ -512,7 +512,7 @@ class Fees extends Admin_Controller
         $this->data['terms'] = $this->fees_model->get_session_terms(get_session_id(), $branchID);
 
         if ($_POST) {
-            if (is_superadmin_loggedin()) {
+            if (!is_superadmin_loggedin()) {
                 $this->form_validation->set_rules('branch_id', translate('branch'), 'trim|required');
             }
             $this->form_validation->set_rules('term_id', translate('term'), 'trim|required');
@@ -1487,5 +1487,68 @@ class Fees extends Admin_Controller
             $this->data['record_array'] = $record_array;
             $this->load->view('fees/selectedFeesCollect', $this->data);
         }
+    }
+
+    /**
+     * Exclude a fee type from student's invoice (AJAX)
+     */
+    public function excludeFeeType()
+    {
+        if (!get_permission('collect_fees', 'is_edit')) {
+            ajax_access_denied();
+        }
+
+        if ($_POST) {
+            $allocation_id = $this->input->post('allocation_id');
+            $fee_type_id = $this->input->post('fee_type_id');
+
+            // Check if any payment has been made for this fee
+            $this->db->select('fee_payment_history.amount');
+            $this->db->from('fee_payment_history');
+            $this->db->where('fee_payment_history.allocation_id', $allocation_id);
+            $this->db->where('fee_payment_history.type_id', $fee_type_id);
+            $deposit = $this->db->get()->row();
+
+            if (!empty($deposit) && $deposit->amount > 0) {
+                $array = array('status' => 'false', 'message' => translate('cannot_exclude_paid_fee'));
+            } else {
+                $result = $this->fees_model->excludeFeeType($allocation_id, $fee_type_id);
+                if ($result) {
+                    $array = array('status' => 'true', 'message' => translate('fee_excluded_successfully'));
+                } else {
+                    $array = array('status' => 'false', 'message' => translate('failed_to_exclude_fee'));
+                }
+            }
+        } else {
+            $array = array('status' => 'false', 'message' => translate('invalid_request'));
+        }
+
+        echo json_encode($array);
+    }
+
+    /**
+     * Remove a fee exclusion (restore fee to invoice) (AJAX)
+     */
+    public function removeFeeExclusion()
+    {
+        if (!get_permission('collect_fees', 'is_edit')) {
+            ajax_access_denied();
+        }
+
+        if ($_POST) {
+            $allocation_id = $this->input->post('allocation_id');
+            $fee_type_id = $this->input->post('fee_type_id');
+
+            $result = $this->fees_model->removeFeeExclusion($allocation_id, $fee_type_id);
+            if ($result) {
+                $array = array('status' => 'true', 'message' => translate('fee_restored_successfully'));
+            } else {
+                $array = array('status' => 'false', 'message' => translate('failed_to_restore_fee'));
+            }
+        } else {
+            $array = array('status' => 'false', 'message' => translate('invalid_request'));
+        }
+
+        echo json_encode($array);
     }
 }

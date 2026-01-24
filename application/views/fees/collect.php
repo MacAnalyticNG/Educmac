@@ -65,6 +65,11 @@ if ($extINTL == true) {
 				<a href="#fully_paid" data-toggle="tab"><i class="far fa-credit-card"></i> Fully Paid</a>
 			</li>
 <?php endif; ?>
+<?php if (get_permission('collect_fees', 'is_view')): ?>
+			<li>
+				<a href="#removed_fees" data-toggle="tab"><i class="fas fa-ban"></i> <?=translate('removed_fees')?></a>
+			</li>
+<?php endif; ?>
 		</ul>
 		<div class="tab-content">
 			<div id="invoice" class="tab-pane <?=empty($this->session->flashdata('pay_tab')) ? 'active' : ''; ?>">
@@ -214,9 +219,18 @@ if ($extINTL == true) {
 											</div>
 										</td>
 										<td class="hidden-print"><?php echo $count++;?></td>
-										<td class="text-dark"><?=$row['name']?></td>
+										<td class="text-dark">
+											<?=$row['name']?>
+											<?php if (get_permission('collect_fees', 'is_edit') && $type_amount == 0): ?>
+												<button type="button" class="btn btn-xs btn-danger pull-right hidden-print"
+													onclick="excludeFeeType(<?= $row['allocation_id'] ?>, <?= $row['fee_type_id'] ?>, this)"
+													data-toggle="tooltip" title="<?=translate('remove_fee_from_invoice')?>">
+													<i class="fas fa-trash"></i>
+												</button>
+											<?php endif; ?>
+										</td>
 										<td><?=_d($row['due_date'])?></td>
-										<td><?php 
+										<td><?php
 											$status = 0;
 											$labelmode = '';
 											if($type_amount == 0) {
@@ -720,6 +734,60 @@ if (moduleIsEnabled('transport')) {
 					<?php echo form_close();?>
 				</div>
 			<?php endif; ?>
+
+			<?php if (get_permission('collect_fees', 'is_view')): ?>
+				<!-- Removed Fees Tab -->
+				<div id="removed_fees" class="tab-pane">
+					<div class="panel-body">
+						<div class="table-responsive mt-md">
+							<table class="table table-bordered table-hover table-condensed">
+								<thead>
+									<tr>
+										<th>#</th>
+										<th><?=translate('fee_type')?></th>
+										<th><?=translate('fee_group')?></th>
+										<th><?=translate('term')?></th>
+										<th><?=translate('amount')?></th>
+										<th><?=translate('removed_date')?></th>
+										<th><?=translate('action')?></th>
+									</tr>
+								</thead>
+								<tbody>
+									<?php
+									$exclusions = $this->fees_model->getStudentExclusionsWithDetails($basic['enroll_id'], $selected_term_id);
+									if (empty($exclusions)) {
+										echo '<tr><td colspan="7" class="text-center">' . translate('no_records_found') . '</td></tr>';
+									} else {
+										$count = 1;
+										foreach ($exclusions as $exclusion):
+									?>
+									<tr>
+										<td><?=$count++?></td>
+										<td><?=htmlspecialchars($exclusion->fee_type_name)?></td>
+										<td><?=htmlspecialchars($exclusion->fee_group_name)?></td>
+										<td><?=!empty($exclusion->term_name) ? htmlspecialchars($exclusion->term_name) : '-'?></td>
+										<td><?=currencyFormat($exclusion->amount)?></td>
+										<td><?=date('d M Y, H:i', strtotime($exclusion->excluded_date))?></td>
+										<td>
+											<?php if (get_permission('collect_fees', 'is_edit')): ?>
+												<button type="button" class="btn btn-xs btn-success"
+													onclick="restoreFeeType(<?=$exclusion->allocation_id?>, <?=$exclusion->fee_type_id?>, this)"
+													data-toggle="tooltip" title="<?=translate('restore_fee')?>">
+													<i class="fas fa-undo"></i> <?=translate('restore')?>
+												</button>
+											<?php endif; ?>
+										</td>
+									</tr>
+									<?php
+										endforeach;
+									}
+									?>
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			<?php endif; ?>
 		</div>
 	</div>
 </section>
@@ -1010,4 +1078,149 @@ if (moduleIsEnabled('transport')) {
 	        }
 	    });
     });
+
+    // Fee Exclusion Functions
+    function excludeFeeType(allocationID, feeTypeID, element) {
+        var $btn = $(element);
+
+        swal({
+            title: "<?=translate('are_you_sure')?>",
+            text: "<?=translate('exclude_fee_confirmation')?>",
+            type: "warning",
+            showCancelButton: true,
+            confirmButtonClass: "btn btn-default swal2-btn-default",
+            cancelButtonClass: "btn btn-default swal2-btn-default",
+            confirmButtonText: "<?=translate('yes_remove_it')?>",
+            cancelButtonText: "<?=translate('cancel')?>",
+            buttonsStyling: false,
+            showCloseButton: true
+        }).then((result) => {
+            if (result.value) {
+                $.ajax({
+                    url: base_url + 'fees/excludeFeeType',
+                    type: 'POST',
+                    data: {
+                        allocation_id: allocationID,
+                        fee_type_id: feeTypeID
+                    },
+                    dataType: 'json',
+                    beforeSend: function() {
+                        $btn.prop('disabled', true);
+                        $btn.html('<i class="fas fa-spinner fa-spin"></i>');
+                    },
+                    success: function(data) {
+                        if (data.status == 'true') {
+                            swal({
+                                title: "<?=translate('success')?>",
+                                text: data.message,
+                                type: "success",
+                                confirmButtonClass: "btn btn-default swal2-btn-default",
+                                buttonsStyling: false,
+                                showCloseButton: true
+                            }).then((result) => {
+                                if (result.value) {
+                                    location.reload();
+                                }
+                            });
+                        } else {
+                            swal({
+                                title: "<?=translate('error')?>",
+                                text: data.message,
+                                type: "error",
+                                confirmButtonClass: "btn btn-default swal2-btn-default",
+                                buttonsStyling: false,
+                                showCloseButton: true
+                            });
+                            $btn.prop('disabled', false);
+                            $btn.html('<i class="fas fa-trash"></i>');
+                        }
+                    },
+                    error: function() {
+                        swal({
+                            title: "<?=translate('error')?>",
+                            text: "<?=translate('an_error_occurred')?>",
+                            type: "error",
+                            confirmButtonClass: "btn btn-default swal2-btn-default",
+                            buttonsStyling: false,
+                            showCloseButton: true
+                        });
+                        $btn.prop('disabled', false);
+                        $btn.html('<i class="fas fa-trash"></i>');
+                    }
+                });
+            }
+        });
+    }
+
+    function restoreFeeType(allocationID, feeTypeID, element) {
+        var $btn = $(element);
+
+        swal({
+            title: "<?=translate('are_you_sure')?>",
+            text: "<?=translate('restore_fee_confirmation')?>",
+            type: "warning",
+            showCancelButton: true,
+            confirmButtonClass: "btn btn-default swal2-btn-default",
+            cancelButtonClass: "btn btn-default swal2-btn-default",
+            confirmButtonText: "<?=translate('yes_restore_it')?>",
+            cancelButtonText: "<?=translate('cancel')?>",
+            buttonsStyling: false,
+            showCloseButton: true
+        }).then((result) => {
+            if (result.value) {
+                $.ajax({
+                    url: base_url + 'fees/removeFeeExclusion',
+                    type: 'POST',
+                    data: {
+                        allocation_id: allocationID,
+                        fee_type_id: feeTypeID
+                    },
+                    dataType: 'json',
+                    beforeSend: function() {
+                        $btn.prop('disabled', true);
+                        $btn.html('<i class="fas fa-spinner fa-spin"></i>');
+                    },
+                    success: function(data) {
+                        if (data.status == 'true') {
+                            swal({
+                                title: "<?=translate('success')?>",
+                                text: data.message,
+                                type: "success",
+                                confirmButtonClass: "btn btn-default swal2-btn-default",
+                                buttonsStyling: false,
+                                showCloseButton: true
+                            }).then((result) => {
+                                if (result.value) {
+                                    location.reload();
+                                }
+                            });
+                        } else {
+                            swal({
+                                title: "<?=translate('error')?>",
+                                text: data.message,
+                                type: "error",
+                                confirmButtonClass: "btn btn-default swal2-btn-default",
+                                buttonsStyling: false,
+                                showCloseButton: true
+                            });
+                            $btn.prop('disabled', false);
+                            $btn.html('<i class="fas fa-undo"></i> <?=translate('restore')?>');
+                        }
+                    },
+                    error: function() {
+                        swal({
+                            title: "<?=translate('error')?>",
+                            text: "<?=translate('an_error_occurred')?>",
+                            type: "error",
+                            confirmButtonClass: "btn btn-default swal2-btn-default",
+                            buttonsStyling: false,
+                            showCloseButton: true
+                        });
+                        $btn.prop('disabled', false);
+                        $btn.html('<i class="fas fa-undo"></i> <?=translate('restore')?>');
+                    }
+                });
+            }
+        });
+    }
 </script>

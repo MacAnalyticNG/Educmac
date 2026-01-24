@@ -565,7 +565,7 @@ class Sessions extends Admin_Controller
             set_alert('success', 'Automatic term switching enabled');
         } else {
             $session_id = get_session_id();
-            $branch_id = $this->application_model->get_branch_id();
+            $branch_id = get_loggedin_branch_id();
 
             $term = $this->db->get_where('academic_terms', [
                 'id' => $term_id,
@@ -582,7 +582,7 @@ class Sessions extends Admin_Controller
                 $this->session->set_userdata('manually_set_term_id', $term_id);
                 set_alert('success', 'Term switched to ' . $term->term_name);
             } else {
-                set_alert('error', 'Invalid term selected');
+                set_alert('error', 'Invalid term selected (Session: ' . $session_id . ', Branch: ' . $branch_id . ', Term: ' . $term_id . ')');
             }
         }
 

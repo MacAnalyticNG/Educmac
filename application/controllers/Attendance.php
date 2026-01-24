@@ -523,7 +523,7 @@ class Attendance extends Admin_Controller
         $schoolDays = $this->get_school_days($active_term->start_date, $active_term->end_date, $branchID);
 
         // Load PhpSpreadsheet
-        require_once APPPATH . 'third_party/vendor/autoload.php';
+        require_once FCPATH . 'vendor/autoload.php';
 
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -534,19 +534,21 @@ class Attendance extends Admin_Controller
         $sheet->setCellValue('C1', 'Roll');
         $sheet->setCellValue('D1', 'Student Name');
 
-        $col = 4; // Start from column E
+        $colIndex = 5; // Start from column E (1-based index)
         foreach ($schoolDays as $day) {
-            $sheet->setCellValueByColumnAndRow($col + 1, 1, date('d-M-Y', strtotime($day)));
-            $col++;
+            $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+            $sheet->setCellValue($colLetter . '1', date('d-M-Y', strtotime($day)));
+            $colIndex++;
         }
 
         // Style header row
+        $lastColLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex - 1);
         $headerStyle = [
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
             'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
         ];
-        $sheet->getStyle('A1:' . $sheet->getCellByColumnAndRow($col, 1)->getCoordinate())->applyFromArray($headerStyle);
+        $sheet->getStyle('A1:' . $lastColLetter . '1')->applyFromArray($headerStyle);
 
         // Fill student data
         $row = 2;
@@ -557,9 +559,10 @@ class Attendance extends Admin_Controller
             $sheet->setCellValue('D' . $row, $student['first_name'] . ' ' . $student['last_name']);
 
             // Set data validation for attendance columns
-            $col = 4;
+            $colIndex = 5;
             foreach ($schoolDays as $day) {
-                $cellCoord = $sheet->getCellByColumnAndRow($col + 1, $row)->getCoordinate();
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($colIndex);
+                $cellCoord = $colLetter . $row;
                 $validation = $sheet->getCell($cellCoord)->getDataValidation();
                 $validation->setType(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::TYPE_LIST);
                 $validation->setErrorStyle(\PhpOffice\PhpSpreadsheet\Cell\DataValidation::STYLE_INFORMATION);
@@ -571,9 +574,9 @@ class Attendance extends Admin_Controller
                 $validation->setError('Value must be P, A, L, or HD');
                 $validation->setPromptTitle('Attendance Status');
                 $validation->setPrompt('Select: P=Present, A=Absent, L=Late, HD=Half Day');
-                $validation->setFormulaSqref($cellCoord);
+                $validation->setSqref($cellCoord);
                 $validation->setFormula1('"P,A,L,HD"');
-                $col++;
+                $colIndex++;
             }
             $row++;
         }
@@ -640,7 +643,7 @@ class Attendance extends Admin_Controller
         $classID = $this->input->post('class_id');
         $sectionID = $this->input->post('section_id');
 
-        require_once APPPATH . 'third_party/vendor/autoload.php';
+        require_once FCPATH . 'vendor/autoload.php';
 
         $file = $_FILES['excel_file']['tmp_name'];
         $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file);
@@ -656,8 +659,8 @@ class Attendance extends Admin_Controller
 
         // Process each student row
         for ($row = 2; $row <= $highestRow; $row++) {
-            $enrollID = $sheet->getCellByColumnAndRow(1, $row)->getValue();
-            $registerNo = $sheet->getCellByColumnAndRow(2, $row)->getValue();
+            $enrollID = $sheet->getCell('A' . $row)->getValue();
+            $registerNo = $sheet->getCell('B' . $row)->getValue();
 
             if (empty($enrollID)) {
                 continue;
@@ -665,8 +668,9 @@ class Attendance extends Admin_Controller
 
             // Process each date column
             for ($col = 5; $col <= $highestColumnIndex; $col++) {
-                $dateHeader = $sheet->getCellByColumnAndRow($col, 1)->getValue();
-                $status = strtoupper(trim($sheet->getCellByColumnAndRow($col, $row)->getValue()));
+                $colLetter = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col);
+                $dateHeader = $sheet->getCell($colLetter . '1')->getValue();
+                $status = strtoupper(trim($sheet->getCell($colLetter . $row)->getValue()));
 
                 if (empty($status)) {
                     continue;

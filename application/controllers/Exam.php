@@ -767,4 +767,426 @@ class Exam extends Admin_Controller
             echo json_encode($array);
         }
     }
+
+    public function import_marks()
+    {
+        if (!get_permission('exam_mark', 'is_add')) {
+            access_denied();
+        }
+        $branchID = $this->application_model->get_branch_id();
+        $this->data['branch_id'] = $branchID;
+        if (isset($_POST['upload'])) {
+            $this->form_validation->set_rules('class_id', translate('class'), 'trim|required');
+            $this->form_validation->set_rules('section_id', translate('section'), 'trim|required');
+            $this->form_validation->set_rules('subject_id', translate('subject'), 'trim|required');
+            $this->form_validation->set_rules('exam_id', translate('exam'), 'trim|required');
+            $is_surepass = $this->input->post('is_surepass') == '1';
+            if ($is_surepass) {
+                $this->form_validation->set_rules('distribution_id', 'Mark Distribution', 'trim|required');
+            }
+            if ($this->form_validation->run() == true) {
+                if (empty($_FILES['excel_file']['name'])) {
+                    set_alert('error', 'Please select an Excel file');
+                    redirect(current_url());
+                }
+                $upload_path = FCPATH . 'uploads/temp/';
+                if (!is_dir($upload_path)) {
+                    mkdir($upload_path, 0777, true);
+                }
+                $config['upload_path'] = $upload_path;
+                $config['allowed_types'] = 'xlsx|xls';
+                $config['max_size'] = 2048;
+                $this->load->library('upload', $config);
+                $this->upload->initialize($config);
+                $originalFilename = '';
+                if (!empty($_FILES['excel_file']['name'])) {
+                    $originalFilename = pathinfo($_FILES['excel_file']['name'], PATHINFO_FILENAME);
+                }
+                if ($this->upload->do_upload('excel_file')) {
+                    $fileData = $this->upload->data();
+                    $filePath = $fileData['full_path'];
+                    $temp_path = FCPATH . 'uploads/temp/';
+                    if (is_dir($temp_path)) {
+                        $files = glob($temp_path . '*');
+                        $now = time();
+                        foreach ($files as $file) {
+                            if (is_file($file)) {
+                                if ($now - filemtime($file) >= 3600) {
+                                    unlink($file);
+                                }
+                            }
+                        }
+                    }
+                    $classID = $this->input->post('class_id');
+                    $sectionID = $this->input->post('section_id');
+                    $subjectID = $this->input->post('subject_id');
+                    $examID = $this->input->post('exam_id');
+                    $sessionID = get_session_id();
+                    if ($is_surepass) {
+                        $this->process_surepass_import($filePath, $classID, $sectionID, $subjectID, $examID, $branchID, $sessionID);
+                    } else {
+                        $this->process_regular_import($filePath, $classID, $sectionID, $subjectID, $examID, $branchID, $sessionID, $originalFilename);
+                    }
+                } else {
+                    $error = $this->upload->display_errors('', '');
+                    set_alert('error', $error);
+                    redirect(current_url());
+                }
+            }
+        }
+        $this->data['filename_warning'] = $this->session->userdata('filename_warning');
+        $this->session->unset_userdata('filename_warning');
+        $this->data['import_errors'] = $this->session->userdata('import_errors');
+        $this->session->unset_userdata('import_errors');
+        $this->data['title'] = translate('import_marks');
+        $this->data['sub_page'] = 'exam/import_marks';
+        $this->data['main_menu'] = 'mark';
+        $this->load->view('layout/index', $this->data);
+    }
+
+    private function process_surepass_import($filePath, $classID, $sectionID, $subjectID, $examID, $branchID, $sessionID)
+    {
+        $distributionID = $this->input->post('distribution_id');
+        require_once FCPATH . 'vendor/autoload.php';
+        try {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+        } catch (Exception $e) {
+            unlink($filePath);
+            set_alert('error', 'Error reading Excel file: ' . $e->getMessage());
+            redirect(current_url());
+        }
+        $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        if (empty($timetable_detail)) {
+            unlink($filePath);
+            set_alert('error', 'No timetable found for this exam configuration');
+            redirect(current_url());
+        }
+        $distributions = json_decode($timetable_detail['mark_distribution'], true);
+        if (!isset($distributions[$distributionID])) {
+            unlink($filePath);
+            set_alert('error', 'Selected mark distribution not found in exam timetable');
+            redirect(current_url());
+        }
+        $max_mark = $distributions[$distributionID]['full_mark'];
+        $success_count = 0;
+        $error_count = 0;
+        $errors = array();
+        for ($i = 1; $i < count($rows); $i++) {
+            $row = $rows[$i];
+            if (empty($row[0])) {
+                continue;
+            }
+            $email = trim($row[0]);
+            $score_column = isset($row[2]) ? trim($row[2]) : '';
+            if (empty($score_column)) {
+                continue;
+            }
+            $parts = explode('/', $score_column);
+            if (count($parts) !== 2) {
+                $error_count++;
+                $errors[] = array(
+                    'student_email' => $email,
+                    'error' => 'Invalid score format: ' . $score_column
+                );
+                continue;
+            }
+            $mark_obtained = trim($parts[0]);
+            if (!is_numeric($mark_obtained)) {
+                $error_count++;
+                $errors[] = array(
+                    'student_email' => $email,
+                    'error' => 'Invalid mark value: ' . $mark_obtained
+                );
+                continue;
+            }
+            $mark_obtained = floatval($mark_obtained);
+            if ($mark_obtained > $max_mark) {
+                $error_count++;
+                $errors[] = array(
+                    'student_email' => $email,
+                    'mark_obtained' => $mark_obtained,
+                    'max_mark' => $max_mark,
+                    'error' => 'Mark exceeds maximum'
+                );
+                continue;
+            }
+            $this->db->select('s.id as student_id');
+            $this->db->from('student as s');
+            $this->db->join('enroll as en', 'en.student_id = s.id', 'inner');
+            $this->db->where('s.email', $email);
+            $this->db->where('en.class_id', $classID);
+            $this->db->where('en.section_id', $sectionID);
+            $this->db->where('en.branch_id', $branchID);
+            $this->db->where('en.session_id', $sessionID);
+            $this->db->where('s.active', 1);
+            $student = $this->db->get()->row();
+            if (!$student) {
+                $error_count++;
+                $errors[] = array(
+                    'student_email' => $email,
+                    'error' => 'Student not found in selected class/section'
+                );
+                continue;
+            }
+            $student_id = $student->student_id;
+            $arrayMarks = array(
+                'student_id' => $student_id,
+                'exam_id' => $examID,
+                'class_id' => $classID,
+                'section_id' => $sectionID,
+                'subject_id' => $subjectID,
+                'branch_id' => $branchID,
+                'session_id' => $sessionID,
+            );
+            $query = $this->db->get_where('mark', $arrayMarks);
+            $existing_marks = array();
+            if ($query->num_rows() > 0) {
+                $existing_mark = $query->row();
+                $existing_marks = json_decode($existing_mark->mark, true);
+                if (empty($existing_marks)) {
+                    $existing_marks = array();
+                }
+            }
+            $existing_marks[$distributionID] = $mark_obtained;
+            $inputMark = json_encode($existing_marks);
+            if ($query->num_rows() > 0) {
+                $this->db->where('id', $existing_mark->id);
+                $this->db->update('mark', array('mark' => $inputMark, 'absent' => ''));
+            } else {
+                $arrayMarks['mark'] = $inputMark;
+                $arrayMarks['absent'] = '';
+                $this->db->insert('mark', $arrayMarks);
+            }
+            $success_count++;
+        }
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+        if ($success_count > 0) {
+            set_alert('success', $success_count . ' marks imported successfully from SurePass');
+        } else {
+            set_alert('error', 'No marks were imported');
+        }
+        if ($error_count > 0) {
+            $this->session->set_userdata('import_errors', $errors);
+        }
+        redirect(current_url());
+    }
+
+    private function process_regular_import($filePath, $classID, $sectionID, $subjectID, $examID, $branchID, $sessionID, $originalFilename)
+    {
+        $class_name = get_type_name_by_id('class', $classID);
+        $section_name = get_type_name_by_id('section', $sectionID);
+        $subject_name = get_type_name_by_id('subject', $subjectID);
+        $exam_details = $this->exam_model->getExamByID($examID);
+        $term_name = isset($exam_details->term_name) ? $exam_details->term_name : 'exam';
+        $expectedFilename = slugify($class_name) . '_' . slugify($section_name) . '_' . slugify($subject_name) . '_' . slugify($term_name);
+        if (!empty($originalFilename) && $originalFilename !== $expectedFilename) {
+            $warningMsg = '<strong>Warning:</strong> The uploaded file name does not match the selected filters.<br>';
+            $warningMsg .= 'Expected: <strong>' . $expectedFilename . '.xlsx</strong><br>';
+            $warningMsg .= 'Uploaded: <strong>' . $originalFilename . '.xlsx</strong><br>';
+            $warningMsg .= 'Please ensure you are importing the correct file for this class, section, subject, and term.';
+            $this->session->set_userdata('filename_warning', $warningMsg);
+        }
+        require_once FCPATH . 'vendor/autoload.php';
+        try {
+            $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
+            $worksheet = $spreadsheet->getActiveSheet();
+            $rows = $worksheet->toArray();
+        } catch (Exception $e) {
+            unlink($filePath);
+            set_alert('error', 'Error reading Excel file: ' . $e->getMessage());
+            redirect(current_url());
+        }
+        $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        if (empty($timetable_detail)) {
+            unlink($filePath);
+            set_alert('error', 'No timetable found for this configuration. Please setup exam timetable first.');
+            redirect(current_url());
+        }
+        $distributions = json_decode($timetable_detail['mark_distribution'], true);
+        $success_count = 0;
+        $error_count = 0;
+        $errors = array();
+        for ($i = 1; $i < count($rows); $i++) {
+            $row = $rows[$i];
+            if (empty($row[0]) && empty($row[1])) {
+                continue;
+            }
+            $student_id = $row[0];
+            $student_name = isset($row[1]) ? trim($row[1]) : 'Unknown Student';
+            $is_absent = isset($row[4]) && strtolower(trim($row[4])) === 'yes' ? true : false;
+            $is_optional = isset($row[5]) && strtolower(trim($row[5])) === 'yes' ? true : false;
+            $assMark = array();
+            $col_index = 6;
+            foreach ($distributions as $dist_id => $dist_data) {
+                if (!$is_absent) {
+                    $mark = isset($row[$col_index]) ? trim($row[$col_index]) : '';
+                    if ($mark !== '' && is_numeric($mark)) {
+                        if ($mark > $dist_data['full_mark']) {
+                            $dist_name = get_type_name_by_id('exam_mark_distribution', $dist_id);
+                            $errors[] = array(
+                                'student_name' => $student_name,
+                                'distribution' => $dist_name,
+                                'mark_entered' => $mark,
+                                'max_mark' => $dist_data['full_mark']
+                            );
+                            $error_count++;
+                            continue 2;
+                        }
+                        $assMark[$dist_id] = $mark;
+                    } else {
+                        $assMark[$dist_id] = '';
+                    }
+                }
+                $col_index++;
+            }
+            $arrayMarks = array(
+                'student_id' => $student_id,
+                'exam_id' => $examID,
+                'class_id' => $classID,
+                'section_id' => $sectionID,
+                'subject_id' => $subjectID,
+                'branch_id' => $branchID,
+                'session_id' => $sessionID,
+            );
+            $inputMark = ($is_absent || $is_optional) ? null : json_encode($assMark);
+            $absent = $is_absent ? 'on' : '';
+            $is_optional_value = $is_optional ? '1' : '0';
+            $query = $this->db->get_where('mark', $arrayMarks);
+            if ($query->num_rows() > 0) {
+                if (in_array('', $assMark) && !$is_absent && !$is_optional) {
+                    $this->db->where('id', $query->row()->id);
+                    $this->db->delete('mark');
+                } else {
+                    $this->db->where('id', $query->row()->id);
+                    $this->db->update('mark', array('mark' => $inputMark, 'absent' => $absent, 'is_optional' => $is_optional_value));
+                }
+            } else {
+                if (!in_array('', $assMark) || $is_absent || $is_optional) {
+                    $arrayMarks['mark'] = $inputMark;
+                    $arrayMarks['absent'] = $absent;
+                    $arrayMarks['is_optional'] = $is_optional_value;
+                    $this->db->insert('mark', $arrayMarks);
+                }
+            }
+            $success_count++;
+        }
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+        if ($success_count > 0) {
+            set_alert('success', $success_count . ' marks imported successfully');
+        } else {
+            set_alert('error', 'No marks were imported');
+        }
+        if ($error_count > 0) {
+            $this->session->set_userdata('import_errors', $errors);
+        }
+        redirect(current_url());
+    }
+
+    public function download_marks_template()
+    {
+        if (!get_permission('exam_mark', 'is_add')) {
+            ajax_access_denied();
+        }
+        $classID = $this->input->post('class_id');
+        $sectionID = $this->input->post('section_id');
+        $subjectID = $this->input->post('subject_id');
+        $examID = $this->input->post('exam_id');
+        $branchID = $this->application_model->get_branch_id();
+        $sessionID = get_session_id();
+        if (empty($classID) || empty($sectionID) || empty($subjectID) || empty($examID)) {
+            echo json_encode(array('status' => 'error', 'message' => 'All fields are required'));
+            exit;
+        }
+        $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        if (empty($timetable_detail)) {
+            echo json_encode(array('status' => 'error', 'message' => 'No timetable found for this configuration. Please setup exam timetable first.'));
+            exit;
+        }
+        $this->db->select('en.student_id, en.roll, st.first_name, st.last_name, st.register_no, m.mark as get_mark, IFNULL(m.absent, 0) as get_abs, IFNULL(m.is_optional, 0) as is_optional');
+        $this->db->from('enroll as en');
+        $this->db->join('student as st', 'st.id = en.student_id', 'inner');
+        $this->db->join('mark as m', 'm.student_id = en.student_id and m.class_id = en.class_id and m.section_id = en.section_id and m.exam_id = ' . $this->db->escape($examID) . ' and m.subject_id = ' . $this->db->escape($subjectID), 'left');
+        $this->db->where('en.class_id', $classID);
+        $this->db->where('en.section_id', $sectionID);
+        $this->db->where('en.branch_id', $branchID);
+        $this->db->where('en.session_id', $sessionID);
+        $this->db->where('st.active', 1);
+        $this->db->order_by('en.roll', 'ASC');
+        $students = $this->db->get()->result_array();
+        if (empty($students)) {
+            echo json_encode(array('status' => 'error', 'message' => 'No students enrolled in this class and section (Branch: ' . $branchID . ', Session: ' . $sessionID . ')'));
+            exit;
+        }
+        require_once FCPATH . 'vendor/autoload.php';
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+        $sheet->setCellValue('A1', 'Student ID');
+        $sheet->setCellValue('B1', 'Student Name');
+        $sheet->setCellValue('C1', 'Register No');
+        $sheet->setCellValue('D1', 'Roll');
+        $sheet->setCellValue('E1', 'Is Absent (Yes/No)');
+        $sheet->setCellValue('F1', 'Optional (Yes/No)');
+        $col_letter = 'G';
+        $distributions = json_decode($timetable_detail['mark_distribution'], true);
+        foreach ($distributions as $dist_id => $dist_data) {
+            $dist_name = get_type_name_by_id('exam_mark_distribution', $dist_id);
+            $sheet->setCellValue($col_letter . '1', $dist_name . ' (Max: ' . $dist_data['full_mark'] . ')');
+            $col_letter++;
+        }
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => [
+                'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4CAF50']
+            ],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
+        ];
+        $sheet->getStyle('A1:' . chr(ord($col_letter) - 1) . '1')->applyFromArray($headerStyle);
+        $row = 2;
+        foreach ($students as $student) {
+            $sheet->setCellValue('A' . $row, $student['student_id']);
+            $sheet->setCellValue('B' . $row, $student['first_name'] . ' ' . $student['last_name']);
+            $sheet->setCellValue('C' . $row, $student['register_no']);
+            $sheet->setCellValue('D' . $row, $student['roll']);
+            $sheet->setCellValue('E' . $row, isset($student['get_abs']) && $student['get_abs'] == '1' ? 'Yes' : 'No');
+            $sheet->setCellValue('F' . $row, isset($student['is_optional']) && $student['is_optional'] == '1' ? 'Yes' : 'No');
+            $getDetails = array();
+            if (!empty($student['get_mark'])) {
+                $getDetails = json_decode($student['get_mark'], true);
+            }
+            $col_letter = 'G';
+            foreach ($distributions as $dist_id => $dist_data) {
+                $existMark = isset($getDetails[$dist_id]) ? $getDetails[$dist_id] : '';
+                $sheet->setCellValue($col_letter . $row, $existMark);
+                $col_letter++;
+            }
+            $row++;
+        }
+        foreach (range('A', chr(ord($col_letter) - 1)) as $col) {
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $class_name = get_type_name_by_id('class', $classID);
+        $section_name = get_type_name_by_id('section', $sectionID);
+        $subject_name = get_type_name_by_id('subject', $subjectID);
+        $exam_details = $this->exam_model->getExamByID($examID);
+        $term_name = isset($exam_details->term_name) ? $exam_details->term_name : 'exam';
+        $filename = slugify($class_name) . '_' . slugify($section_name) . '_' . slugify($subject_name) . '_' . slugify($term_name) . '.xlsx';
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $temp_file = FCPATH . 'uploads/temp/' . $filename;
+        if (!is_dir(FCPATH . 'uploads/temp/')) {
+            mkdir(FCPATH . 'uploads/temp/', 0777, true);
+        }
+        $writer->save($temp_file);
+        echo json_encode(array(
+            'status' => 'success',
+            'filename' => $filename,
+            'download_url' => base_url('uploads/temp/' . $filename)
+        ));
+    }
 }

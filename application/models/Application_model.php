@@ -12,7 +12,10 @@ class Application_model extends CI_Model
     public function get_branch_id()
     {
         if (is_superadmin_loggedin()) {
-            return $this->input->post('branch_id');
+            // Super admin uses global branch switcher, so get from session
+            // Only fall back to POST if explicitly provided (for backward compatibility)
+            $post_branch = $this->input->post('branch_id');
+            return !empty($post_branch) ? $post_branch : get_loggedin_branch_id();
         } else {
             return get_loggedin_branch_id();
         }
