@@ -391,6 +391,35 @@ class Exam extends Admin_Controller
         }
     }
 
+    /* subject marks preview */
+    public function subject_preview()
+    {
+        if (!get_permission('exam_mark', 'is_view')) {
+            access_denied();
+        }
+
+        $branchID = $this->application_model->get_branch_id();
+        $classID = $this->input->post('class_id');
+        $sectionID = $this->input->post('section_id');
+        $subjectID = $this->input->post('subject_id');
+        $examID = $this->input->post('exam_id');
+
+        $this->data['branch_id'] = $branchID;
+        $this->data['class_id'] = $classID;
+        $this->data['section_id'] = $sectionID;
+        $this->data['subject_id'] = $subjectID;
+        $this->data['exam_id'] = $examID;
+        if (isset($_POST['search'])) {
+            $this->data['timetable_detail'] = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+            $this->data['student'] = $this->exam_model->getMarkAndStudent($branchID, $classID, $sectionID, $examID, $subjectID);
+        }
+
+        $this->data['sub_page'] = 'exam/subject_preview';
+        $this->data['main_menu'] = 'mark';
+        $this->data['title'] = translate('subject_marks_preview');
+        $this->load->view('layout/index', $this->data);
+    }
+
     //exam mark register validation check
     public function valid_Mark($val, $i)
     {

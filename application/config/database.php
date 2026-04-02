@@ -70,7 +70,7 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 | The $query_builder variables lets you determine whether or not to load
 | the query builder class.
 */
-$active_group = 'dev';
+$active_group = 'demo';
 $query_builder = TRUE;
 
 $db['dev'] = array(
@@ -78,7 +78,7 @@ $db['dev'] = array(
 	'hostname' => 'localhost',
 	'username' => 'root',
 	'password' => '',
-	'database' => 'ra-dev',
+	'database' => 'thommyadel',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,
@@ -99,9 +99,9 @@ $db['dev'] = array(
 $db['default'] = array(
 	'dsn'	=> '',
 	'hostname' => 'localhost',
-	'username' => 'mehjprhb_edumac',
-	'password' => '@1mW,N*9b0{cBBGM',
-	'database' => 'mehjprhb_edumac',
+	'username' => 'root',
+	'password' => '',
+	'database' => 'thommyadel',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,
@@ -121,9 +121,9 @@ $db['default'] = array(
 $db['demo'] = array(
 	'dsn'	=> '',
 	'hostname' => 'localhost',
-	'username' => 'mehjprhb_demodb',
-	'password' => 'oKY7fj8fn_F9ZMzR',
-	'database' => 'mehjprhb_demodb',
+	'username' => 'root',
+	'password' => '',
+	'database' => 'thommyadel',
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,

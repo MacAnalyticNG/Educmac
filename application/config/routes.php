@@ -148,5 +148,11 @@ $route['404_override'] = 'errors';
 if ($saas_default) {
 	$route['default_controller'] = 'saas_website/index';
 }
+$route['wallet'] = 'wallet/index';
+$route['wallet/(:any)'] = 'wallet/$1';
+$route['extracurricular'] = 'extracurricular/index';
+$route['extracurricular/(:any)'] = 'extracurricular/$1';
+$route['notifications'] = 'notifications/index';
+$route['notifications/(:any)'] = 'notifications/$1';
 $route['(:any)'] = 'home/index/$1';
 $route['translate_uri_dashes'] = FALSE;

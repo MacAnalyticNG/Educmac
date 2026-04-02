@@ -79,6 +79,13 @@
                     <span class="error"></span>
                 </div>
             </div>
+            <div class="col-md-4 mb-sm">
+                <div class="form-group">
+                    <label class="control-label"> <?= translate('result_password') ?> <span class="required">*</span></label>
+                    <input type="password" class="form-control" name="password" autocomplete="off" />
+                    <span class="error"></span>
+                </div>
+            </div>
         </div>
         <input type="hidden" name="grade_scale" value="<?php echo $page_data['grade_scale']; ?>">
         <input type="hidden" name="attendance" value="<?php echo $page_data['attendance']; ?>">

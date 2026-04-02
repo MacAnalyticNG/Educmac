@@ -51,6 +51,9 @@ $currency_symbol = $global_config['currency_symbol'];
 						<button type="submit" class="btn btn-default btn-circle" data-loading-text="<i class='fas fa-spinner fa-spin'></i> Processing">
 							<i class="fas fa-print"></i> <?=translate('generate')?>
 						</button>
+						<a href="<?=base_url('payroll/export_bank_excel?month_year=' . $this->input->post('month_year'))?>" class="btn btn-default btn-circle">
+							<i class="fas fa-file-excel"></i> <?=translate('export_bank_excel')?>
+						</a>
 					</div>
 				</h4>
 			</header>

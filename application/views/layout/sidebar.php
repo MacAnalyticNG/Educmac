@@ -1,3 +1,4 @@
+<?php $sub_menu = isset($sub_menu) ? $sub_menu : ''; ?>
 <aside id="sidebar-left" class="sidebar-left">
     <div class="sidebar-header">
         <div class="sidebar-title">
@@ -848,6 +849,13 @@
                                                     </a>
                                                 </li>
                                             <?php } ?>
+                                            <?php if (get_permission('subject_class_assign', 'is_add')) { ?>
+                                                <li class="<?php if ($sub_page == 'subject/copy_subjects') echo 'nav-active'; ?>">
+                                                    <a href="<?= base_url('subject/copy_subjects') ?>">
+                                                        <span><i class="fas fa-copy"></i> <?= translate('copy_subjects') ?></span>
+                                                    </a>
+                                                </li>
+                                            <?php } ?>
                                         </ul>
                                     </li>
                                 <?php } ?>
@@ -1081,6 +1089,13 @@
                                                 <li class="<?php if ($sub_page == 'exam/marks_register') echo 'nav-active'; ?>">
                                                     <a href="<?= base_url('exam/mark_entry') ?>">
                                                         <span><?= translate('mark_entries') ?></span>
+                                                    </a>
+                                                </li>
+                                            <?php }
+                                            if (get_permission('exam_mark', 'is_view')) { ?>
+                                                <li class="<?php if ($sub_page == 'exam/subject_preview') echo 'nav-active'; ?>">
+                                                    <a href="<?= base_url('exam/subject_preview') ?>">
+                                                        <span><?= translate('subject_marks_preview') ?></span>
                                                     </a>
                                                 </li>
                                             <?php }
@@ -2119,6 +2134,22 @@
                             </ul>
                         </li>
                     <?php } ?>
+                    <!-- Custom Features added -->
+                    <li class="<?php if ($main_menu == 'wallet') echo 'nav-active'; ?>">
+                        <a href="<?= base_url('wallet') ?>">
+                            <i class="fa fa-money" aria-hidden="true"></i><span>Student Wallet</span>
+                        </a>
+                    </li>
+                    <li class="<?php if ($main_menu == 'extracurricular') echo 'nav-active'; ?>">
+                        <a href="<?= base_url('extracurricular') ?>">
+                            <i class="fa fa-futbol-o" aria-hidden="true"></i><span>Extracurricular</span>
+                        </a>
+                    </li>
+                    <li class="<?php if ($main_menu == 'notifications') echo 'nav-active'; ?>">
+                        <a href="<?= base_url('notifications') ?>">
+                            <i class="fa fa-bell" aria-hidden="true"></i><span>Notifications</span>
+                        </a>
+                    </li>
                 </ul>
             </nav>
         </div>

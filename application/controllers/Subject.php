@@ -324,4 +324,152 @@ class Subject extends Admin_Controller
         }
         echo $html;
     }
+
+    /**
+     * Copy Subjects - View page
+     * Allows copying subject assignments from a previous session to the current one
+     */
+    public function copy_subjects()
+    {
+        if (!get_permission('subject_class_assign', 'is_add')) {
+            access_denied();
+        }
+
+        $branchID = $this->application_model->get_branch_id();
+        $currentSessionID = get_session_id();
+
+        // Get all sessions for the dropdown
+        $this->data['sessions'] = $this->db->order_by('id', 'DESC')->get('schoolyear')->result_array();
+        $this->data['current_session_id'] = $currentSessionID;
+        $this->data['branch_id'] = $branchID;
+        $this->data['title'] = translate('copy_subjects');
+        $this->data['sub_page'] = 'subject/copy_subjects';
+        $this->data['main_menu'] = 'subject';
+        $this->load->view('layout/index', $this->data);
+    }
+
+    /**
+     * Preview assignments from a source session (AJAX)
+     */
+    public function preview_copy_subjects()
+    {
+        if (!get_permission('subject_class_assign', 'is_add')) {
+            echo json_encode(array('status' => 'error', 'message' => translate('access_denied')));
+            return;
+        }
+
+        $sourceSessionID = $this->input->post('source_session_id');
+        $branchID = $this->application_model->get_branch_id();
+
+        if (empty($sourceSessionID) || empty($branchID)) {
+            echo json_encode(array('status' => 'error', 'message' => 'Please select a source session.'));
+            return;
+        }
+
+        // Get all subject assignments from the source session
+        $this->db->select('sa.class_id, sa.section_id, sa.subject_id, sa.teacher_id, c.name as class_name, s.name as section_name, sub.name as subject_name, sub.subject_code');
+        $this->db->from('subject_assign as sa');
+        $this->db->join('class as c', 'c.id = sa.class_id', 'left');
+        $this->db->join('section as s', 's.id = sa.section_id', 'left');
+        $this->db->join('subject as sub', 'sub.id = sa.subject_id', 'left');
+        $this->db->where('sa.session_id', $sourceSessionID);
+        $this->db->where('sa.branch_id', $branchID);
+        $this->db->order_by('c.name', 'ASC');
+        $this->db->order_by('s.name', 'ASC');
+        $assignments = $this->db->get()->result_array();
+
+        if (empty($assignments)) {
+            echo json_encode(array('status' => 'empty', 'message' => 'No subject assignments found in the selected session.'));
+            return;
+        }
+
+        // Group by class + section
+        $grouped = array();
+        foreach ($assignments as $row) {
+            $key = $row['class_id'] . '-' . $row['section_id'];
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = array(
+                    'class_name' => $row['class_name'],
+                    'section_name' => $row['section_name'],
+                    'subjects' => array()
+                );
+            }
+            $grouped[$key]['subjects'][] = $row['subject_name'] . ' (' . $row['subject_code'] . ')';
+        }
+
+        echo json_encode(array('status' => 'success', 'data' => $grouped, 'total' => count($assignments)));
+    }
+
+    /**
+     * Execute the copy of subjects from source session to current session
+     */
+    public function copy_subjects_save()
+    {
+        if (!get_permission('subject_class_assign', 'is_add')) {
+            echo json_encode(array('status' => 'error', 'message' => translate('access_denied')));
+            return;
+        }
+
+        $sourceSessionID = $this->input->post('source_session_id');
+        $targetSessionID = get_session_id();
+        $branchID = $this->application_model->get_branch_id();
+
+        if (empty($sourceSessionID) || empty($branchID)) {
+            echo json_encode(array('status' => 'error', 'message' => 'Please select a source session.'));
+            return;
+        }
+
+        if ($sourceSessionID == $targetSessionID) {
+            echo json_encode(array('status' => 'error', 'message' => 'Source and target sessions cannot be the same.'));
+            return;
+        }
+
+        // Get all subject assignments from the source session
+        $this->db->select('class_id, section_id, subject_id, teacher_id');
+        $this->db->where('session_id', $sourceSessionID);
+        $this->db->where('branch_id', $branchID);
+        $sourceAssignments = $this->db->get('subject_assign')->result_array();
+
+        if (empty($sourceAssignments)) {
+            echo json_encode(array('status' => 'error', 'message' => 'No subject assignments found in the source session.'));
+            return;
+        }
+
+        $copiedCount = 0;
+        $skippedCount = 0;
+
+        foreach ($sourceAssignments as $assignment) {
+            // Check if the assignment already exists in the target session
+            $exists = $this->db->get_where('subject_assign', array(
+                'class_id' => $assignment['class_id'],
+                'section_id' => $assignment['section_id'],
+                'subject_id' => $assignment['subject_id'],
+                'session_id' => $targetSessionID,
+                'branch_id' => $branchID,
+            ))->num_rows();
+
+            if ($exists == 0) {
+                $newAssignment = array(
+                    'class_id' => $assignment['class_id'],
+                    'section_id' => $assignment['section_id'],
+                    'subject_id' => $assignment['subject_id'],
+                    'teacher_id' => $assignment['teacher_id'],
+                    'session_id' => $targetSessionID,
+                    'branch_id' => $branchID,
+                );
+                $this->db->insert('subject_assign', $newAssignment);
+                $copiedCount++;
+            } else {
+                $skippedCount++;
+            }
+        }
+
+        $message = $copiedCount . ' subject assignment(s) copied successfully.';
+        if ($skippedCount > 0) {
+            $message .= ' ' . $skippedCount . ' already existed and were skipped.';
+        }
+
+        set_alert('success', $message);
+        echo json_encode(array('status' => 'success', 'message' => $message, 'copied' => $copiedCount, 'skipped' => $skippedCount));
+    }
 }

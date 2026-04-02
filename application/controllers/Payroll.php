@@ -334,4 +334,96 @@ class Payroll extends Admin_Controller
             echo $this->load->view('payroll/payslipPrint', $this->data, true);
         }
     }
+
+    /**
+     * Export payroll bank details to Excel for bulk payment
+     */
+    public function export_bank_excel()
+    {
+        if (!get_permission('salary_summary_report', 'is_view')) {
+            access_denied();
+        }
+
+        $month_year = $this->input->get('month_year');
+        $staff_role = $this->input->get('staff_role');
+        $branch_id = $this->application_model->get_branch_id();
+
+        if (empty($month_year)) {
+            set_alert('error', 'Select month and year.');
+            redirect(base_url('payroll/salary_statement'));
+        }
+
+        $month = date("m", strtotime($month_year));
+        $year = date("Y", strtotime($month_year));
+
+        // Get paid payslips with bank details
+        $this->db->select('p.*, s.name as staff_name, s.staff_id as staff_no, sd.name as designation, sb.bank_name, sb.account_no, sb.holder_name, sb.bank_branch, sb.ifsc_code');
+        $this->db->from('payslip as p');
+        $this->db->join('staff as s', 's.id = p.staff_id', 'left');
+        $this->db->join('staff_designation as sd', 'sd.id = s.designation', 'left');
+        $this->db->join('staff_bank_account as sb', 'sb.staff_id = s.id', 'left');
+        $this->db->where('p.branch_id', $branch_id);
+        $this->db->where('month(p.month)', $month);
+        $this->db->where('p.year', $year);
+        if (!empty($staff_role)) {
+            $this->db->join('login_credential as lc', 'lc.user_id = s.id', 'left');
+            $this->db->where('lc.role', $staff_role);
+        }
+        $payslips = $this->db->get()->result_array();
+
+        if (empty($payslips)) {
+            set_alert('error', 'No paid payslips found for the selected period.');
+            redirect(base_url('payroll/salary_statement'));
+        }
+
+        // Load PhpSpreadsheet
+        require_once FCPATH . 'vendor/autoload.php';
+        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
+
+        // Set headers
+        $headers = [
+            'Staff ID', 'Staff Name', 'Designation', 'Bank Name', 
+            'Account Holder', 'Account Number', 'Bank Branch', 'IFSC Code', 'Net Salary'
+        ];
+        $col = 'A';
+        foreach ($headers as $header) {
+            $sheet->setCellValue($col . '1', $header);
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+            $col++;
+        }
+
+        // Style header
+        $headerStyle = [
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '4472C4']],
+            'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER]
+        ];
+        $sheet->getStyle('A1:I1')->applyFromArray($headerStyle);
+
+        // Fill data
+        $row = 2;
+        foreach ($payslips as $p) {
+            $sheet->setCellValue('A' . $row, $p['staff_no']);
+            $sheet->setCellValue('B' . $row, $p['staff_name']);
+            $sheet->setCellValue('C' . $row, $p['designation']);
+            $sheet->setCellValue('D' . $row, $p['bank_name'] ?: 'N/A');
+            $sheet->setCellValue('E' . $row, $p['holder_name'] ?: $p['staff_name']);
+            $sheet->setCellValueExplicit('F' . $row, $p['account_no'] ?: 'N/A', \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+            $sheet->setCellValue('G' . $row, $p['bank_branch'] ?: 'N/A');
+            $sheet->setCellValue('H' . $row, $p['ifsc_code'] ?: 'N/A');
+            $sheet->setCellValue('I' . $row, $p['net_salary']);
+            $row++;
+        }
+
+        // Send file to browser
+        $filename = 'Bank_Payroll_Export_' . $month_year . '_' . date('His') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+
+        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
 }

@@ -539,10 +539,12 @@ class Home extends Frontend_Controller
             $this->form_validation->set_rules('exam_id', translate('exam'), 'trim|required');
             $this->form_validation->set_rules('register_no', translate('register_no'), 'trim|required');
             $this->form_validation->set_rules('session_id', translate('academic_year'), 'trim|required');
+            $this->form_validation->set_rules('password', translate('password'), 'trim|required');
             if ($this->form_validation->run() == true) {
                 $sessionID = $this->input->post('session_id');
                 $registerNo = $this->input->post('register_no');
                 $examID = $this->input->post('exam_id');
+                $password = $this->input->post('password');
 
                 $this->db->select('student.id,student.parent_id,enroll.id as enroll_id,enroll.class_id,enroll.section_id,enroll.branch_id');
                 $this->db->from('enroll');
@@ -554,6 +556,18 @@ class Home extends Frontend_Controller
 
                 if (empty($userID)) {
                     $array = array('status' => '0', 'error' => "Register No Not Found.");
+                    echo json_encode($array);
+                    exit();
+                }
+
+                // Verify Password
+                $this->db->select('password');
+                $this->db->from('login_credential');
+                $this->db->where('user_id', $userID['id']);
+                $this->db->where('role', 7);
+                $login = $this->db->get()->row();
+                if (!$login || !password_verify($password, $login->password)) {
+                    $array = array('status' => '0', 'error' => "Invalid Password.");
                     echo json_encode($array);
                     exit();
                 }
