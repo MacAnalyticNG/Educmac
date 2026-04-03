@@ -4,7 +4,7 @@ require __DIR__.'/../vendor/autoload.php';
 
 use Money\Currencies;
 
-$buffer = <<<PHP
+$buffer = <<<EOF
 <?php
 
 namespace Money;
@@ -36,7 +36,7 @@ trait MoneyFactory
     }
 }
 
-PHP;
+EOF;
 
 $methodBuffer = '';
 

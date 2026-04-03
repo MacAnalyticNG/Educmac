@@ -1093,6 +1093,13 @@
                                                 </li>
                                             <?php }
                                             if (get_permission('exam_mark', 'is_view')) { ?>
+                                                <li class="<?php if ($sub_page == 'exam/import_marks') echo 'nav-active'; ?>">
+                                                    <a href="<?= base_url('exam/import_marks') ?>">
+                                                        <span><?= translate('import') . " " . translate('marks') ?></span>
+                                                    </a>
+                                                </li>
+                                            <?php }
+                                            if (get_permission('exam_mark', 'is_view')) { ?>
                                                 <li class="<?php if ($sub_page == 'exam/subject_preview') echo 'nav-active'; ?>">
                                                     <a href="<?= base_url('exam/subject_preview') ?>">
                                                         <span><?= translate('subject_marks_preview') ?></span>

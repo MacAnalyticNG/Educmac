@@ -26,7 +26,7 @@ class Migration_create_custom_field extends CI_Migration {
 			],
 			'field_type' => [
 				'type' => 'ENUM',
-				'constraint' => ''text','textarea','dropdown','date','checkbox','number','url','email'',
+				'constraint' => "'text','textarea','dropdown','date','checkbox','number','url','email'",
 				'null' => FALSE,
 			],
 			'required' => [

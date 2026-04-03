@@ -14,6 +14,10 @@ This document serves as an ongoing log for major features, tasks, and system mod
 - **Activity Pipeline:** Finalized the module for Administrators to define global clubs and events. Fixed continuous 403 Forbidden network errors blocking insertions by retrofitting the view with CSRF headers.
 - **Student Enrollment:** Fully engineered the assignment pipeline linking students to activities. Added `assign()` backend logic inside `Extracurricular.php` alongside a new UI allowing schools to seamlessly assign users and view enrolled participants.
 
+### 3. Excel Exam Marks Integration
+- **Sidebar & Core Integration:** Added a new `Import Marks` feature directly into the master sidebar underneath the Mark Entries section, increasing workflow accessibility. Also embedded a fast `Batch Import (Excel)` gateway inside the primary mark register list.
+- **Multi-Subject Processing Engine:** Overhauled the Excel export and import pipeline within `Exam.php`. Educators can now seamlessly generate templates covering the entire class spectrum and select `All Subjects` from the refined `import_marks.php` view. Both upload and download endpoints now correctly format multiple subjects with dedicated column headers.
+
 ---
 
 ## [March 2026] School Standardization & HR Integration

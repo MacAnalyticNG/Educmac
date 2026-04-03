@@ -67,7 +67,7 @@
                             <label class="control-label"><?= translate('subject') ?> <span class="required">*</span></label>
                             <?php
                             if (!empty(set_value('class_id'))) {
-                                $arraySubject = array("" => translate('select'));
+                                $arraySubject = array("" => translate('select'), "all" => translate('all_subjects'));
                                 $query = $this->subject_model->getSubjectByClassSection(set_value('class_id'), set_value('section_id'));
                                 $subjects = $query->result_array();
                                 foreach ($subjects as $row) {
@@ -201,6 +201,7 @@
                 },
                 success: function(data) {
                     $('#subject_id').html(data);
+                    $('<option value="all"><?= translate("all_subjects") ?></option>').insertAfter('#subject_id option:first');
                 }
             });
             checkUploadButton();

@@ -1006,9 +1006,10 @@ class Exam extends Admin_Controller
 
     private function process_regular_import($filePath, $classID, $sectionID, $subjectID, $examID, $branchID, $sessionID, $originalFilename)
     {
+        $is_multi_subject_submit = ($subjectID === 'all');
         $class_name = get_type_name_by_id('class', $classID);
         $section_name = get_type_name_by_id('section', $sectionID);
-        $subject_name = get_type_name_by_id('subject', $subjectID);
+        $subject_name = $is_multi_subject_submit ? 'all_subjects' : get_type_name_by_id('subject', $subjectID);
         $exam_details = $this->exam_model->getExamByID($examID);
         $term_name = isset($exam_details->term_name) ? $exam_details->term_name : 'exam';
         $expectedFilename = slugify($class_name) . '_' . slugify($section_name) . '_' . slugify($subject_name) . '_' . slugify($term_name);
@@ -1029,7 +1030,14 @@ class Exam extends Admin_Controller
             set_alert('error', 'Error reading Excel file: ' . $e->getMessage());
             redirect(current_url());
         }
-        $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        $is_multi_subject = (isset($rows[0][4]) && trim($rows[0][4]) === 'Subject ID');
+        if ($is_multi_subject) {
+            // Get timetable detail for the first subject assuming uniform distribution across subjects
+            $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $this->exam_model->getSubjectList($examID, $classID, $sectionID, $sessionID)[0]['subject_id']);
+        } else {
+            $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        }
+
         if (empty($timetable_detail)) {
             unlink($filePath);
             set_alert('error', 'No timetable found for this configuration. Please setup exam timetable first.');
@@ -1046,10 +1054,20 @@ class Exam extends Admin_Controller
             }
             $student_id = $row[0];
             $student_name = isset($row[1]) ? trim($row[1]) : 'Unknown Student';
-            $is_absent = isset($row[4]) && strtolower(trim($row[4])) === 'yes' ? true : false;
-            $is_optional = isset($row[5]) && strtolower(trim($row[5])) === 'yes' ? true : false;
+            
+            if ($is_multi_subject) {
+                $current_subject_id = isset($row[4]) ? trim($row[4]) : $subjectID;
+                $is_absent = isset($row[6]) && strtolower(trim($row[6])) === 'yes' ? true : false;
+                $is_optional = isset($row[7]) && strtolower(trim($row[7])) === 'yes' ? true : false;
+                $col_index = 8;
+            } else {
+                $current_subject_id = $subjectID;
+                $is_absent = isset($row[4]) && strtolower(trim($row[4])) === 'yes' ? true : false;
+                $is_optional = isset($row[5]) && strtolower(trim($row[5])) === 'yes' ? true : false;
+                $col_index = 6;
+            }
+            
             $assMark = array();
-            $col_index = 6;
             foreach ($distributions as $dist_id => $dist_data) {
                 if (!$is_absent) {
                     $mark = isset($row[$col_index]) ? trim($row[$col_index]) : '';
@@ -1077,7 +1095,7 @@ class Exam extends Admin_Controller
                 'exam_id' => $examID,
                 'class_id' => $classID,
                 'section_id' => $sectionID,
-                'subject_id' => $subjectID,
+                'subject_id' => $current_subject_id,
                 'branch_id' => $branchID,
                 'session_id' => $sessionID,
             );
@@ -1132,15 +1150,26 @@ class Exam extends Admin_Controller
             echo json_encode(array('status' => 'error', 'message' => 'All fields are required'));
             exit;
         }
-        $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+        $is_multi_subject = ($subjectID == 'all');
+        if ($is_multi_subject) {
+            $subjects = $this->exam_model->getSubjectList($examID, $classID, $sectionID, $sessionID);
+            if (empty($subjects)) {
+                echo json_encode(array('status' => 'error', 'message' => 'No subjects found for this exam/class/section'));
+                exit;
+            }
+            $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjects[0]['subject_id']);
+        } else {
+            $timetable_detail = $this->exam_model->getTimetableDetail($classID, $sectionID, $examID, $subjectID);
+            $subjects = array(array('subject_id' => $subjectID, 'subject_name' => get_type_name_by_id('subject', $subjectID)));
+        }
+
         if (empty($timetable_detail)) {
             echo json_encode(array('status' => 'error', 'message' => 'No timetable found for this configuration. Please setup exam timetable first.'));
             exit;
         }
-        $this->db->select('en.student_id, en.roll, st.first_name, st.last_name, st.register_no, m.mark as get_mark, IFNULL(m.absent, 0) as get_abs, IFNULL(m.is_optional, 0) as is_optional');
+        $this->db->select('en.student_id, en.roll, st.first_name, st.last_name, st.register_no, en.class_id, en.section_id');
         $this->db->from('enroll as en');
         $this->db->join('student as st', 'st.id = en.student_id', 'inner');
-        $this->db->join('mark as m', 'm.student_id = en.student_id and m.class_id = en.class_id and m.section_id = en.section_id and m.exam_id = ' . $this->db->escape($examID) . ' and m.subject_id = ' . $this->db->escape($subjectID), 'left');
         $this->db->where('en.class_id', $classID);
         $this->db->where('en.section_id', $sectionID);
         $this->db->where('en.branch_id', $branchID);
@@ -1152,6 +1181,22 @@ class Exam extends Admin_Controller
             echo json_encode(array('status' => 'error', 'message' => 'No students enrolled in this class and section (Branch: ' . $branchID . ', Session: ' . $sessionID . ')'));
             exit;
         }
+        
+        // Fetch all marks for these subjects/students if multi-subject
+        $all_marks = [];
+        if ($is_multi_subject) {
+            $this->db->select('student_id, subject_id, mark as get_mark, IFNULL(absent, 0) as get_abs, IFNULL(is_optional, 0) as is_optional');
+            $this->db->from('mark');
+            $this->db->where('class_id', $classID);
+            $this->db->where('section_id', $sectionID);
+            $this->db->where('exam_id', $examID);
+            $this->db->where('session_id', $sessionID);
+            $marks_query = $this->db->get()->result_array();
+            foreach ($marks_query as $mq) {
+                $all_marks[$mq['student_id'] . '_' . $mq['subject_id']] = $mq;
+            }
+        }
+
         require_once FCPATH . 'vendor/autoload.php';
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -1159,9 +1204,19 @@ class Exam extends Admin_Controller
         $sheet->setCellValue('B1', 'Student Name');
         $sheet->setCellValue('C1', 'Register No');
         $sheet->setCellValue('D1', 'Roll');
-        $sheet->setCellValue('E1', 'Is Absent (Yes/No)');
-        $sheet->setCellValue('F1', 'Optional (Yes/No)');
-        $col_letter = 'G';
+        
+        if ($is_multi_subject) {
+            $sheet->setCellValue('E1', 'Subject ID');
+            $sheet->setCellValue('F1', 'Subject Name');
+            $sheet->setCellValue('G1', 'Is Absent (Yes/No)');
+            $sheet->setCellValue('H1', 'Optional (Yes/No)');
+            $col_letter = 'I';
+        } else {
+            $sheet->setCellValue('E1', 'Is Absent (Yes/No)');
+            $sheet->setCellValue('F1', 'Optional (Yes/No)');
+            $col_letter = 'G';
+        }
+        
         $distributions = json_decode($timetable_detail['mark_distribution'], true);
         foreach ($distributions as $dist_id => $dist_data) {
             $dist_name = get_type_name_by_id('exam_mark_distribution', $dist_id);
@@ -1179,23 +1234,49 @@ class Exam extends Admin_Controller
         $sheet->getStyle('A1:' . chr(ord($col_letter) - 1) . '1')->applyFromArray($headerStyle);
         $row = 2;
         foreach ($students as $student) {
-            $sheet->setCellValue('A' . $row, $student['student_id']);
-            $sheet->setCellValue('B' . $row, $student['first_name'] . ' ' . $student['last_name']);
-            $sheet->setCellValue('C' . $row, $student['register_no']);
-            $sheet->setCellValue('D' . $row, $student['roll']);
-            $sheet->setCellValue('E' . $row, isset($student['get_abs']) && $student['get_abs'] == '1' ? 'Yes' : 'No');
-            $sheet->setCellValue('F' . $row, isset($student['is_optional']) && $student['is_optional'] == '1' ? 'Yes' : 'No');
-            $getDetails = array();
-            if (!empty($student['get_mark'])) {
-                $getDetails = json_decode($student['get_mark'], true);
+            foreach ($subjects as $sub) {
+                $sheet->setCellValue('A' . $row, $student['student_id']);
+                $sheet->setCellValue('B' . $row, $student['first_name'] . ' ' . $student['last_name']);
+                $sheet->setCellValue('C' . $row, $student['register_no']);
+                $sheet->setCellValue('D' . $row, $student['roll']);
+                
+                if ($is_multi_subject) {
+                    $sheet->setCellValue('E' . $row, $sub['subject_id']);
+                    $sheet->setCellValue('F' . $row, $sub['subject_name']);
+                    
+                    $mq = isset($all_marks[$student['student_id'] . '_' . $sub['subject_id']]) ? $all_marks[$student['student_id'] . '_' . $sub['subject_id']] : [];
+                    $getDetails = !empty($mq['get_mark']) ? json_decode($mq['get_mark'], true) : [];
+                    $is_abs = isset($mq['get_abs']) ? $mq['get_abs'] : 0;
+                    $is_opt = isset($mq['is_optional']) ? $mq['is_optional'] : 0;
+                    
+                    $sheet->setCellValue('G' . $row, $is_abs == '1' ? 'Yes' : 'No');
+                    $sheet->setCellValue('H' . $row, $is_opt == '1' ? 'Yes' : 'No');
+                    $col_letter_curr = 'I';
+                } else {
+                    // For single subject we need to fetch the mark specifically or it could be passed via the older join
+                    $this->db->select('mark as get_mark, IFNULL(absent, 0) as get_abs, IFNULL(is_optional, 0) as is_optional');
+                    $this->db->from('mark');
+                    $this->db->where('student_id', $student['student_id']);
+                    $this->db->where('exam_id', $examID);
+                    $this->db->where('subject_id', $sub['subject_id']);
+                    $mq = $this->db->get()->row_array();
+                    
+                    $getDetails = !empty($mq['get_mark']) ? json_decode($mq['get_mark'], true) : [];
+                    $is_abs = isset($mq['get_abs']) ? $mq['get_abs'] : 0;
+                    $is_opt = isset($mq['is_optional']) ? $mq['is_optional'] : 0;
+                    
+                    $sheet->setCellValue('E' . $row, $is_abs == '1' ? 'Yes' : 'No');
+                    $sheet->setCellValue('F' . $row, $is_opt == '1' ? 'Yes' : 'No');
+                    $col_letter_curr = 'G';
+                }
+                
+                foreach ($distributions as $dist_id => $dist_data) {
+                    $existMark = isset($getDetails[$dist_id]) ? $getDetails[$dist_id] : '';
+                    $sheet->setCellValue($col_letter_curr . $row, $existMark);
+                    $col_letter_curr++;
+                }
+                $row++;
             }
-            $col_letter = 'G';
-            foreach ($distributions as $dist_id => $dist_data) {
-                $existMark = isset($getDetails[$dist_id]) ? $getDetails[$dist_id] : '';
-                $sheet->setCellValue($col_letter . $row, $existMark);
-                $col_letter++;
-            }
-            $row++;
         }
         foreach (range('A', chr(ord($col_letter) - 1)) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);

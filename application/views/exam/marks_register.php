@@ -104,6 +104,11 @@
 				echo form_hidden($data);
 			?>
 			<header class="panel-heading">
+				<div class="panel-btn">
+					<a href="<?= base_url('exam/import_marks?branch_id=' . $branch_id . '&exam_id=' . $exam_id . '&class_id=' . $class_id . '&section_id=' . $section_id . '&subject_id=' . $subject_id) ?>" class="btn btn-default btn-circle">
+						<i class="fas fa-file-excel"></i> <?=translate('batch_import')?>
+					</a>
+				</div>
 				<h4 class="panel-title"><i class="fas fa-users"></i> <?=translate('mark_entries')?></h4>
 			</header>
 			<div class="panel-body">
